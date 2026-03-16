@@ -1,10 +1,10 @@
-const CACHE_NAME = 'pbs-tracker-v1';
+const CACHE_NAME = 'pbs-tracker-v2';
 const ASSETS_TO_CACHE = [
-    '/',
-    '/index.html',
-    '/styles/main.css',
-    '/js/app.js',
-    '/js/storage.js',
+    './',
+    './index.html',
+    './styles/main.css',
+    './js/app.js',
+    './js/storage.js',
     'https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.css',
     'https://cdn.jsdelivr.net/npm/chart.js',
     'https://html2canvas.hertzen.com/dist/html2canvas.min.js'
@@ -38,7 +38,7 @@ self.addEventListener('fetch', (event) => {
             return response || fetch(event.request);
         }).catch(() => {
             // Offline fallback if needed
-            return caches.match('/index.html');
+            return caches.match('./index.html');
         })
     );
 });

@@ -7,14 +7,14 @@
     <title>PBS 행동 데이터 트래커</title>
 
     <!-- PWA Settings -->
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#6366f1">
 
     <!-- iOS Specific settings -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="PBS 분석기">
-    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="apple-touch-icon" href="./icon-192.png">
 
     <link rel="stylesheet" href="styles/main.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.css">
@@ -105,7 +105,8 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').then((registration) => {
+                const swPath = window.location.pathname.includes('/PBS-/') ? '/PBS-/sw.js' : './sw.js';
+                navigator.serviceWorker.register(swPath).then((registration) => {
                     console.log('ServiceWorker registration successful with scope: ', registration.scope);
                 }, (err) => {
                     console.log('ServiceWorker registration failed: ', err);
