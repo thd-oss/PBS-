@@ -1,0 +1,21 @@
+{
+    "name": "PBS 행동 데이터 트래커",
+    "short_name": "PBS 분석기",
+    "description": "학교 현장 행동 지원 및 분석을 위한 프로그레시브 웹 앱",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#f1f5f9",
+    "theme_color": "#6366f1",
+    "icons": [
+        {
+            "src": "icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
