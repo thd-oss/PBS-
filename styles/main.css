@@ -415,3 +415,194 @@ h1 {
     font-size: 0.9rem;
     font-family: inherit;
 }
+
+/* Chip Interface */
+.chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.chip-scroll {
+    display: flex;
+    overflow-x: auto;
+    gap: 10px;
+    padding-bottom: 8px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.chip {
+    padding: 10px 16px;
+    border-radius: 20px;
+    background: #f1f5f9;
+    border: 2px solid transparent;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-main);
+    cursor: pointer;
+    white-space: nowrap;
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    transition: all 0.2s;
+}
+
+.chip.active {
+    background: #eef2ff;
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+/* Note with Microphone */
+.note-container {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.btn-stt {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    background: #f1f5f9;
+    border: none;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+/* Toast */
+#toast {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.9);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 30px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+
+#toast.show {
+    opacity: 1;
+}
+
+/* Quick Tab - Giant Button */
+.quick-ui {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    height: 100%;
+}
+
+.btn-quick {
+    width: 200px;
+    height: 200px;
+    border-radius: 100px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    font-size: 1.5rem;
+    font-weight: 800;
+    box-shadow: 0 15px 35px rgba(99, 102, 241, 0.4);
+    transition: all 0.2s;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.btn-quick:active {
+    transform: scale(0.92);
+    box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4);
+}
+
+.btn-quick.running {
+    background: var(--danger);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+.quick-stats {
+    margin-top: 30px;
+    text-align: center;
+}
+
+.stat-item {
+    display: inline-block;
+    margin: 0 15px;
+}
+
+.stat-val {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--primary);
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* Floating Action Button for ABC */
+.fab-container {
+    padding: 0 20px 80px;
+    /* Space for FAB */
+}
+
+.fab-save {
+    position: fixed;
+    bottom: 90px;
+    left: 20px;
+    right: 20px;
+    height: 60px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 30px;
+    font-size: 1.1rem;
+    font-weight: 800;
+    box-shadow: 0 10px 25px rgba(99, 102, 241, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    z-index: 90;
+}
+
+.abc-field label {
+    font-size: 1rem;
+    /* Bigger labels for teacher readability */
+    margin-bottom: 10px;
+}
+
+/* Scroll adjustments */
+#record-content {
+    overflow-y: auto;
+    padding-bottom: 120px;
+    /* Space for fixed bottom UI */
+}
