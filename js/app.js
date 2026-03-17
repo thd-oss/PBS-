@@ -11,16 +11,29 @@ const App = {
     },
     session: null,
 
-    // Quick 기록용 타이머
+    // Quick 기록용 상태
     quickTimer: {
         startTime: null,
         running: false,
         timerId: null,
         longPressTimer: null
     },
+    // 통합 기록 시점 상태
+    recordContext: {
+        date: '',
+        time: '',
+        period: '',
+        subject: ''
+    },
 
     init() {
         this.session = Storage.get(Storage.KEYS.SETTINGS);
+
+        // 날짜/시간 초기화
+        this.recordContext.date = this.getNowDate();
+        this.recordContext.time = this.getNowTime();
+        this.recordContext.period = this.getCurrentPeriod();
+
         this.cacheDOM();
         this.bindEvents();
         this.updateHeaderInfo();
@@ -28,6 +41,7 @@ const App = {
     },
 
     cacheDOM() {
+        this.headerContext = document.getElementById('global-context-header');
         this.recordContent = document.getElementById('record-content');
         this.targetStudent = document.getElementById('target-student');
         this.targetBehavior = document.getElementById('target-behavior');
@@ -72,7 +86,10 @@ const App = {
     },
 
     renderCurrentView() {
-        if (this.currentView === 'record-panel') this.renderRecordPanel();
+        this.renderSharedContext(); // 헤더 정보는 항상 최신화
+        if (this.currentView === 'record-panel') {
+            this.renderRecordPanel();
+        }
         else if (this.currentView === 'insight-panel') this.renderInsightPanel();
         else if (this.currentView === 'settings-panel') this.renderSettingsPanel();
     },
@@ -108,6 +125,44 @@ const App = {
         return new Date().toISOString();
     },
 
+    renderSharedContext() {
+        const rc = this.recordContext;
+        this.headerContext.innerHTML = `
+            <div class="compact-context">
+                <div class="compact-row">
+                    <input type="date" id="global-date" value="${rc.date}" onchange="App.recordContext.date=this.value" />
+                    <input type="time" id="global-time" value="${rc.time}" onchange="App.recordContext.time=this.value" />
+                </div>
+                <div class="compact-row">
+                    <select id="global-period" class="period-select-sm" onchange="App.recordContext.period=this.value">
+                        <option value=""${rc.period === '' ? ' selected' : ''}>교시</option>
+                        ${[1, 2, 3, 4, 5, 6].map(p => `<option value="${p}"${rc.period == p ? ' selected' : ''}>${p}교시</option>`).join('')}
+                        <option value="쉬는시간"${rc.period === '쉬는시간' ? ' selected' : ''}>쉬는시간</option>
+                        <option value="점심"${rc.period === '점심' ? ' selected' : ''}>점심</option>
+                    </select>
+                    <select id="global-subject" class="subject-select-sm" onchange="App.recordContext.subject=this.value">
+                        <option value="">과목</option>
+                        ${['국어', '수학', '영어', '사회', '과학', '음악', '미술', '체육', '도덕', '실과', '창체', '기타']
+                .map(s => `<option${rc.subject === s ? ' selected' : ''}>${s}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+        `;
+    },
+
+    // --- 리팩토링된 ABC UI 헬퍼 ---
+    getChipHtml(group, items, selectedValue) {
+        return `
+            <div class="chip-group ${group === 'settingEvent' ? 'chip-scroll' : ''}">
+                ${items.map(item => `
+                    <div class="chip ${selectedValue === item ? 'active' : ''}" 
+                         onclick="App.selectChip('${group}', '${item}')">
+                        ${item}
+                    </div>
+                `).join('')}
+            </div>`;
+    },
+
     // 현재 시간 기반 교시 자동 추정
     getCurrentPeriod() {
         const now = new Date();
@@ -119,75 +174,6 @@ const App = {
             if (mins >= ranges[i][0] && mins < ranges[i][1]) return (i + 1).toString();
         }
         return '';
-    },
-    // 교시/과목 셀렉터 HTML
-    getPeriodSubjectHtml(prefix) {
-        const cp = this.getCurrentPeriod();
-        return `
-            <div class="datetime-row" style="margin-top:8px;">
-                <select id="${prefix}-period" class="period-select">
-                    <option value=""${cp === '' ? ' selected' : ''}>교시 선택</option>
-                    <option value="1"${cp === '1' ? ' selected' : ''}>1교시</option>
-                    <option value="2"${cp === '2' ? ' selected' : ''}>2교시</option>
-                    <option value="3"${cp === '3' ? ' selected' : ''}>3교시</option>
-                    <option value="4"${cp === '4' ? ' selected' : ''}>4교시</option>
-                    <option value="5"${cp === '5' ? ' selected' : ''}>5교시</option>
-                    <option value="6"${cp === '6' ? ' selected' : ''}>6교시</option>
-                    <option value="쉬는시간">쉬는시간</option>
-                    <option value="점심">점심시간</option>
-                </select>
-                <select id="${prefix}-subject" class="subject-select">
-                    <option value="">과목 선택</option>
-                    <option>국어</option>
-                    <option>수학</option>
-                    <option>영어</option>
-                    <option>사회</option>
-                    <option>과학</option>
-                    <option>음악</option>
-                    <option>미술</option>
-                    <option>체육</option>
-                    <option>도덕</option>
-                    <option>실과</option>
-                    <option>창체</option>
-                    <option>기타</option>
-                </select>
-            </div>`;
-    },
-
-    // --- 리팩토링된 ABC UI 헬퍼 ---
-    getChipHtml(group, items, selectedValue) {
-        return `
-            <div class="chip-group ${group === 'settingEvent' ? 'chip-scroll' : ''}">
-                ${items.map(item => `
-                    <div class="chip ${selectedValue === item ? 'active' : ''}" 
-                         onclick="App.selectChip('${group}', '${item}')">
-                        ${item}
-                    </div>
-                `).join('')}
-            </div>`;
-    },
-
-    selectChip(group, value) {
-        // 이미 선택된 걸 다시 누르면 해제 (기능적 요구사항에 따라 조절 가능)
-        if (this.abcSession[group] === value) {
-            this.abcSession[group] = '';
-        } else {
-            this.abcSession[group] = value;
-        }
-        this.renderRecordPanel();
-    },
-
-    // --- 리팩토링된 ABC UI 헬퍼 ---
-    getChipHtml(group, items, selectedValue) {
-        return `
-            <div class="chip-group ${group === 'settingEvent' ? 'chip-scroll' : ''}">
-                ${items.map(item => `
-                    <div class="chip ${selectedValue === item ? 'active' : ''}" 
-                         onclick="App.selectChip('${group}', '${item}')">
-                        ${item}
-                    </div>
-                `).join('')}
-            </div>`;
     },
 
     selectChip(group, value) {
@@ -212,15 +198,6 @@ const App = {
         return `
             <div class="fab-container">
                 <div class="card" style="padding: 20px 16px; margin-bottom: 80px;">
-                    <div class="abc-field">
-                        <label>발생 시각 · 교시 · 과목</label>
-                        <div class="datetime-row">
-                            <input type="date" id="abc-date" value="${this.getNowDate()}" />
-                            <input type="time" id="abc-time" value="${this.getNowTime()}" />
-                        </div>
-                        ${this.getPeriodSubjectHtml('abc')}
-                    </div>
-
                     <div class="abc-field">
                         <label>1. 배경 사건 (Condition)</label>
                         ${this.getChipHtml('settingEvent', ['평소와 같음', '수면 부족', '약 미복용', '가정 내 사건', '날씨 영향', '피로함'], s.settingEvent)}
@@ -261,6 +238,7 @@ const App = {
 
     getQuickHtml() {
         const running = this.quickTimer.running;
+
         const logs = Storage.getLogs().filter(l =>
             l.studentId === this.session.currentStudentId &&
             l.behaviorId === this.session.currentBehaviorId &&
@@ -273,10 +251,10 @@ const App = {
         return `
             <div class="quick-ui">
                 <button id="quick-btn" class="btn-quick ${running ? 'running' : ''}" 
-                        onmousedown="App.handleQuickStart()" 
-                        onmouseup="App.handleQuickEnd()"
-                        ontouchstart="App.handleQuickStart()"
-                        ontouchend="App.handleQuickEnd()">
+                        onmousedown="App.handleQuickStart(event)" 
+                        onmouseup="App.handleQuickEnd(event)"
+                        ontouchstart="App.handleQuickStart(event)"
+                        ontouchend="App.handleQuickEnd(event)">
                     ${running ? '측정 중...' : '기록 / 타이머'}
                 </button>
                 
@@ -302,7 +280,8 @@ const App = {
         `;
     },
 
-    handleQuickStart() {
+    handleQuickStart(e) {
+        if (e && e.type === 'touchstart') e.preventDefault();
         if (this.quickTimer.running) return;
 
         // Long press detection: after 500ms, start duration timer
@@ -311,7 +290,8 @@ const App = {
         }, 500);
     },
 
-    handleQuickEnd() {
+    handleQuickEnd(e) {
+        if (e && e.type === 'touchend') e.preventDefault();
         clearTimeout(this.quickTimer.longPressTimer);
 
         if (this.quickTimer.running) {
@@ -323,14 +303,19 @@ const App = {
     },
 
     logQuickEvent() {
+        const ts = this.readDateTimeFromInputs('global-date', 'global-time');
+        const period = document.getElementById('global-period').value;
+        const subject = document.getElementById('global-subject').value;
+
         Storage.addLog({
             studentId: this.session.currentStudentId,
             behaviorId: this.session.currentBehaviorId,
             behaviorType: this.targetBehavior.innerText,
             recordMethod: 'event',
-            timestamp: new Date().toISOString(),
+            timestamp: ts,
             details: {
-                period: this.getCurrentPeriod()
+                period: period,
+                subject: subject
             }
         });
         this.showToast('빈도가 기록되었습니다.');
@@ -340,7 +325,13 @@ const App = {
     startQuickDuration() {
         this.quickTimer.running = true;
         this.quickTimer.startTime = Date.now();
-        this.renderRecordPanel();
+
+        // DOM을 통째로 갈아끼우지 않고 페이지만 살짝 변경 (이벤트 끊김 방지)
+        const btn = document.getElementById('quick-btn');
+        if (btn) {
+            btn.classList.add('running');
+            btn.innerText = '측정 중...';
+        }
 
         const display = document.getElementById('quick-timer-display');
         const logs = Storage.getLogs().filter(l =>
@@ -358,23 +349,27 @@ const App = {
 
     stopQuickDuration() {
         const elapsed = Math.floor((Date.now() - this.quickTimer.startTime) / 1000);
+        const ts = this.readDateTimeFromInputs('global-date', 'global-time');
+        const period = document.getElementById('global-period').value;
+        const subject = document.getElementById('global-subject').value;
 
         Storage.addLog({
             studentId: this.session.currentStudentId,
             behaviorId: this.session.currentBehaviorId,
             behaviorType: this.targetBehavior.innerText,
             recordMethod: 'event',
-            timestamp: new Date(this.quickTimer.startTime).toISOString(),
+            timestamp: ts,
             details: {
                 durationSeconds: elapsed,
-                period: this.getCurrentPeriod()
+                period: period,
+                subject: subject
             }
         });
 
         this.quickTimer.running = false;
         clearInterval(this.quickTimer.timerId);
         this.showToast(`${elapsed}초 지속시간이 기록되었습니다.`);
-        this.renderRecordPanel();
+        this.renderRecordPanel(); // 종료 시에는 전체 리렌더링 허용
     },
 
     getFrequencyHtml() {
@@ -428,21 +423,27 @@ const App = {
     },
 
     postRenderRecord() {
-        if (this.currentSubTab === 'quick' && this.quickTimer.running) {
-            // Restore timer display if running
-            const display = document.getElementById('quick-timer-display');
-            const logs = Storage.getLogs().filter(l =>
-                l.studentId === this.session.currentStudentId &&
-                l.behaviorId === this.session.currentBehaviorId &&
-                new Date(l.timestamp).toDateString() === new Date().toDateString()
-            );
-            const prevTotal = logs.reduce((sum, l) => sum + (l.details.durationSeconds || 0), 0);
+        if (this.currentSubTab === 'quick') {
+            const qs = this.quickSession;
+            if (qs.period) document.getElementById('quick-period').value = qs.period;
+            if (qs.subject) document.getElementById('quick-subject').value = qs.subject;
 
-            clearInterval(this.quickTimer.timerId);
-            this.quickTimer.timerId = setInterval(() => {
-                const elapsed = Math.floor((Date.now() - this.quickTimer.startTime) / 1000);
-                if (display) display.innerText = this.formatTime(prevTotal + elapsed);
-            }, 1000);
+            if (this.quickTimer.running) {
+                // Restore timer display if running
+                const display = document.getElementById('quick-timer-display');
+                const logs = Storage.getLogs().filter(l =>
+                    l.studentId === this.session.currentStudentId &&
+                    l.behaviorId === this.session.currentBehaviorId &&
+                    new Date(l.timestamp).toDateString() === new Date().toDateString()
+                );
+                const prevTotal = logs.reduce((sum, l) => sum + (l.details.durationSeconds || 0), 0);
+
+                clearInterval(this.quickTimer.timerId);
+                this.quickTimer.timerId = setInterval(() => {
+                    const elapsed = Math.floor((Date.now() - this.quickTimer.startTime) / 1000);
+                    if (display) display.innerText = this.formatTime(prevTotal + elapsed);
+                }, 1000);
+            }
         }
     },
 
@@ -451,7 +452,7 @@ const App = {
     // ========================
 
     saveABC() {
-        const ts = this.readDateTimeFromInputs('abc-date', 'abc-time');
+        const ts = this.readDateTimeFromInputs('global-date', 'global-time');
         const s = this.abcSession;
 
         Storage.addLog({
@@ -466,8 +467,8 @@ const App = {
                 behaviorDetail: s.bDetail,
                 consequence: s.c,
                 note: document.getElementById('abc-note').value,
-                period: document.getElementById('abc-period').value,
-                subject: document.getElementById('abc-subject').value
+                period: document.getElementById('global-period').value,
+                subject: document.getElementById('global-subject').value
             }
         });
 
@@ -479,11 +480,12 @@ const App = {
     },
 
     undoLastLog() {
+        const todayStr = new Date().toDateString();
         const logs = Storage.getLogs();
         const myLogs = logs.filter(l =>
-            l.recordMethod === 'event' &&
             l.studentId === this.session.currentStudentId &&
-            l.behaviorId === this.session.currentBehaviorId
+            l.behaviorId === this.session.currentBehaviorId &&
+            new Date(l.timestamp).toDateString() === todayStr  // 오늘 기록만 대상
         );
         if (myLogs.length === 0) return this.showToast('취소할 기록이 없습니다.');
         const last = myLogs[myLogs.length - 1];

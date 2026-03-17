@@ -10,7 +10,6 @@
     --text-muted: #64748b;
     --glass: rgba(255, 255, 255, 0.9);
     --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-    --header-height: 100px;
     --nav-height: 70px;
 }
 
@@ -43,43 +42,73 @@ body {
 }
 
 header {
-    height: var(--header-height);
-    padding: 16px 20px;
     background: var(--surface);
     border-bottom: 1px solid #e2e8f0;
+    padding: 10px 16px;
 }
 
-.header-top {
+.header-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 80px;
+}
+
+.header-right {
+    flex: 1;
+    min-width: 0;
+    /* 다른 flex 아이템에 밀리지 않도록 */
+}
+
+h1 {
+    font-size: 1.6rem;
+    font-weight: 900;
+    color: var(--primary);
+    letter-spacing: -0.04em;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+.header-subtitle {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--primary-light);
+    letter-spacing: 0.02em;
+    opacity: 0.8;
+}
+
+#sub-header {
+    margin-top: 6px;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-h1 {
-    font-size: 1.25rem;
-    font-weight: 800;
-    color: var(--primary);
-    letter-spacing: -0.025em;
-}
-
 #current-info {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--text-muted);
-    font-weight: 500;
-    margin-top: 4px;
+    font-weight: 600;
 }
 
 #app-content {
     flex: 1;
     overflow-y: auto;
-    /* Allow content scroll if needed, though we aim for zero-depth */
+    /* Allow content scroll */
     padding-bottom: 20px;
+    scroll-behavior: smooth;
 }
 
 .view {
-    height: 100%;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 /* Sub Tabs (Zero-Depth UI) */
@@ -110,11 +139,14 @@ h1 {
 
 #record-content {
     flex: 1;
-    padding: 20px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    /* Center main input */
+    justify-content: flex-start;
+    /* ABC 콘텐츠가 항상 상단부터 */
+    overflow-y: auto;
+    padding-bottom: 120px;
+    /* 하단 고정 UI 대비 */
 }
 
 /* Bottom Nav */
@@ -377,33 +409,49 @@ h1 {
     gap: 6px;
 }
 
-/* Datetime inputs */
-.datetime-row {
+.compact-context {
     display: flex;
-    gap: 8px;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.datetime-row input[type="date"],
-.datetime-row input[type="time"] {
-    flex: 1;
-    padding: 12px;
-    border-radius: 12px;
-    border: 2px solid #f1f5f9;
-    background: #f8fafc;
-    font-size: 0.9rem;
-    font-family: inherit;
+.compact-row {
+    display: flex;
+    gap: 4px;
 }
 
-.datetime-row .period-select,
-.datetime-row .subject-select {
+.compact-row input,
+.compact-row select {
     flex: 1;
-    padding: 12px;
-    border-radius: 12px;
-    border: 2px solid #f1f5f9;
+    min-width: 0;
+    /* flex 공간 바르게 분배 */
+    padding: 5px 6px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
     background: #f8fafc;
-    font-size: 0.85rem;
+    font-size: 0.72rem;
+    font-weight: 500;
     font-family: inherit;
     color: var(--text-main);
+    outline: none;
+    height: 30px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 날짜입력에 충분한 너비 보장 */
+.compact-row input[type="date"] {
+    min-width: 110px;
+}
+
+.compact-row input[type="time"] {
+    min-width: 80px;
+}
+
+.period-select-sm,
+.subject-select-sm {
+    text-align: center;
 }
 
 .abc-field input[type="datetime-local"] {

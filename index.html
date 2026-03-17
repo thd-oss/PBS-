@@ -25,15 +25,23 @@
 <body>
     <div class="app-container">
         <header>
-            <div class="header-top">
-                <h1>PBS 분석기</h1>
+            <div class="header-main">
+                <div class="header-left">
+                    <h1>PBS</h1>
+                    <span class="header-subtitle">행동데이터트래커</span>
+                </div>
+                <div id="global-context-header" class="header-right">
+                    <!-- 기록 시점 UI (컴팩트) -->
+                </div>
                 <div id="session-controls">
                     <button class="btn-icon" onclick="App.exportCSV()"><i class="lucide-download"></i></button>
                 </div>
             </div>
-            <div id="current-info" onclick="App.switchView('settings-panel')" style="cursor:pointer;">
-                <span id="target-student">학생 로딩 중...</span> · <span id="target-behavior">행동 로딩 중...</span>
-                <span style="font-size:0.7rem; color:var(--primary);"> ▼변경</span>
+            <div id="sub-header">
+                <div id="current-info" onclick="App.switchView('settings-panel')" style="cursor:pointer;">
+                    <span id="target-student">학생 로딩 중...</span> · <span id="target-behavior">행동 로딩 중...</span>
+                    <span style="font-size:0.7rem; color:var(--primary);"> ▼변경</span>
+                </div>
             </div>
         </header>
 
