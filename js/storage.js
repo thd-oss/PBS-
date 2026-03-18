@@ -48,6 +48,17 @@ const Storage = {
         this.save(this.KEYS.LOGS, filtered);
     },
 
+    updateLog(logId, updatedData) {
+        const logs = this.get(this.KEYS.LOGS) || [];
+        const index = logs.findIndex(l => l.id === logId);
+        if (index !== -1) {
+            logs[index] = { ...logs[index], ...updatedData };
+            this.save(this.KEYS.LOGS, logs);
+            return true;
+        }
+        return false;
+    },
+
     getLogs() {
         return this.get(this.KEYS.LOGS) || [];
     },

@@ -91,6 +91,7 @@ const App = {
             this.renderRecordPanel();
         }
         else if (this.currentView === 'insight-panel') this.renderInsightPanel();
+        else if (this.currentView === 'history-panel') this.renderHistoryPanel();
         else if (this.currentView === 'settings-panel') this.renderSettingsPanel();
     },
 
@@ -844,6 +845,135 @@ const App = {
 
     clearData() {
         if (confirm('모든 데이터를 초기화하시겠습니까?')) { Storage.clearAll(); location.reload(); }
+    },
+
+    // ========================
+    //  HISTORY PANEL & EDITING
+    // ========================
+
+    renderHistoryPanel() {
+        const historyList = document.getElementById('history-list');
+        if (!historyList) return;
+
+        const logs = Storage.getLogs()
+            .filter(l => l.studentId === this.session.currentStudentId)
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        if (logs.length === 0) {
+            historyList.innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">기록된 데이터가 없습니다.</p>';
+            return;
+        }
+
+        historyList.innerHTML = logs.map(l => this.getHistoryCardHtml(l)).join('');
+    },
+
+    getHistoryCardHtml(log) {
+        const dt = new Date(log.timestamp);
+        const dateStr = dt.toLocaleDateString('ko-KR');
+        const timeStr = dt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        const d = log.details || {};
+        const isEditing = this.editingLogId === log.id;
+
+        const badgeClass = log.recordMethod === 'abc' ? 'badge-abc' : 'badge-quick';
+        const badgeText = log.recordMethod === 'abc' ? 'ABC' : '간편';
+
+        let content = '';
+        if (log.recordMethod === 'abc') {
+            content = `A: ${d.antecedent || '-'} | B: ${log.behaviorType} | C: ${d.consequence || '-'}`;
+        } else {
+            const dur = d.durationSeconds ? ` (${this.formatTime(d.durationSeconds)})` : '';
+            content = `${log.behaviorType}${dur}`;
+        }
+
+        if (isEditing) {
+            return `
+                <div class="history-card">
+                    <div class="edit-row">
+                        <div class="edit-group">
+                            <label>날짜</label>
+                            <input type="date" id="edit-date-${log.id}" value="${dt.toISOString().slice(0, 10)}">
+                        </div>
+                        <div class="edit-group">
+                            <label>시간</label>
+                            <input type="time" id="edit-time-${log.id}" value="${dt.toTimeString().slice(0, 5)}">
+                        </div>
+                        <div class="edit-group">
+                            <label>교시</label>
+                            <select id="edit-period-${log.id}">
+                                <option value="">교시</option>
+                                ${[1, 2, 3, 4, 5, 6].map(p => `<option value="${p}"${d.period == p ? ' selected' : ''}>${p}교시</option>`).join('')}
+                                <option value="쉬는시간"${d.period === '쉬는시간' ? ' selected' : ''}>쉬는시간</option>
+                                <option value="점심"${d.period === '점심' ? ' selected' : ''}>점심</option>
+                            </select>
+                        </div>
+                        <div class="edit-group">
+                            <label>과목</label>
+                            <select id="edit-subject-${log.id}">
+                                <option value="">과목</option>
+                                ${['국어', '수학', '영어', '사회', '과학', '음악', '미술', '체육', '도덕', '실과', '창체', '기타']
+                    .map(s => `<option${d.subject === s ? ' selected' : ''}>${s}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="history-actions">
+                        <button class="btn-edit" onclick="App.toggleEditLog(null)">취소</button>
+                        <button class="btn-edit btn-save-edit" onclick="App.saveLogEdit('${log.id}')">저장</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="history-card">
+                <div class="history-card-header">
+                    <div>
+                        <span class="history-time">${timeStr}</span>
+                        <span class="history-meta">${dateStr} · ${d.period || '-'}교시 · ${d.subject || '-'}</span>
+                    </div>
+                    <span class="history-badge ${badgeClass}">${badgeText}</span>
+                </div>
+                <div class="history-content">${content}</div>
+                <div class="history-actions">
+                    <button class="btn-edit" onclick="App.toggleEditLog('${log.id}')">수정</button>
+                    <button class="btn-edit" style="color:#ef4444;" onclick="App.deleteLogConfirm('${log.id}')">삭제</button>
+                </div>
+            </div>
+        `;
+    },
+
+    toggleEditLog(logId) {
+        this.editingLogId = logId;
+        this.renderHistoryPanel();
+    },
+
+    saveLogEdit(logId) {
+        const newDate = document.getElementById(`edit-date-${logId}`).value;
+        const newTime = document.getElementById(`edit-time-${logId}`).value;
+        const newPeriod = document.getElementById(`edit-period-${logId}`).value;
+        const newSubject = document.getElementById(`edit-subject-${logId}`).value;
+
+        const newTimestamp = new Date(`${newDate}T${newTime}`).toISOString();
+
+        Storage.updateLog(logId, {
+            timestamp: newTimestamp,
+            details: {
+                ...Storage.getLogs().find(l => l.id === logId).details,
+                period: newPeriod,
+                subject: newSubject
+            }
+        });
+
+        this.editingLogId = null;
+        this.renderHistoryPanel();
+        this.showToast('기록이 수정되었습니다.');
+    },
+
+    deleteLogConfirm(logId) {
+        if (confirm('이 기록을 정말 삭제하시겠습니까?')) {
+            Storage.removeLog(logId);
+            this.renderHistoryPanel();
+            this.showToast('기록이 삭제되었습니다.');
+        }
     }
 };
 
