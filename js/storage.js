@@ -3,7 +3,8 @@ const Storage = {
         STUDENTS: 'pbs_v2_students',
         BEHAVIORS: 'pbs_v2_behaviors',
         LOGS: 'pbs_v2_logs',
-        SETTINGS: 'pbs_v2_settings'
+        SETTINGS: 'pbs_v2_settings',
+        ABC_TAGS: 'pbs_v2_abc_tags'
     },
 
     save(key, data) {
@@ -27,6 +28,17 @@ const Storage = {
             this.save(this.KEYS.LOGS, []);
             this.save(this.KEYS.SETTINGS, { currentStudentId: 's1', currentBehaviorId: 'b1' });
         }
+
+        // ABC 태그 초기화 (v7)
+        if (!this.get(this.KEYS.ABC_TAGS)) {
+            const defaultTags = {
+                settingEvent: ['평소와 같음', '수면 부족', '약 미복용', '가정 내 사건', '날씨 영향', '피로함'],
+                a: ['개별 과제 시작', '교사 지시', '교실 소음', '강화물 제거', '쉬는 시간 종료', '또래 갈등'],
+                bDetail: ['언어적 폭발', '신체적 공격', '수업 이탈', '기물 파손', '지시 불이행'],
+                c: ['교사의 훈육', '과제 중단/수정', '강화물 제거', '친구들의 반응', '타임아웃/격리', '무시하기']
+            };
+            this.save(this.KEYS.ABC_TAGS, defaultTags);
+        }
     },
 
     addLog(logEntry) {
@@ -43,8 +55,11 @@ const Storage = {
     },
 
     removeLog(logId) {
+        console.log('Storage.removeLog called with:', logId);
         const logs = this.get(this.KEYS.LOGS) || [];
+        console.log('Current logs count:', logs.length);
         const filtered = logs.filter(l => l.id !== logId);
+        console.log('Filtered logs count:', filtered.length);
         this.save(this.KEYS.LOGS, filtered);
     },
 
@@ -110,6 +125,28 @@ const Storage = {
     clearAll() {
         localStorage.clear();
         this.init();
+    },
+
+    // ABC Tag Management (v7)
+    getABCTags() {
+        return this.get(this.KEYS.ABC_TAGS) || {};
+    },
+
+    addABCTag(category, tag) {
+        const tags = this.getABCTags();
+        if (!tags[category]) tags[category] = [];
+        if (!tags[category].includes(tag)) {
+            tags[category].push(tag);
+            this.save(this.KEYS.ABC_TAGS, tags);
+        }
+    },
+
+    removeABCTag(category, tag) {
+        const tags = this.getABCTags();
+        if (tags[category]) {
+            tags[category] = tags[category].filter(t => t !== tag);
+            this.save(this.KEYS.ABC_TAGS, tags);
+        }
     }
 };
 

@@ -4,10 +4,14 @@ const App = {
 
     // ABC 기록용 임시 상태
     abcSession: {
-        settingEvent: '',
-        a: '',
-        bDetail: '',
-        c: ''
+        settingEvent: [],
+        a: [],
+        bDetail: [],
+        c: [],
+        settingEventCustom: '',
+        aCustom: '',
+        bDetailCustom: '',
+        cCustom: ''
     },
     session: null,
 
@@ -25,9 +29,11 @@ const App = {
         period: '',
         subject: ''
     },
+    historySelectedStudentId: null,
 
     init() {
         this.session = Storage.get(Storage.KEYS.SETTINGS);
+        this.historySelectedStudentId = this.session.currentStudentId;
 
         // 날짜/시간 초기화
         this.recordContext.date = this.getNowDate();
@@ -45,15 +51,75 @@ const App = {
         this.recordContent = document.getElementById('record-content');
         this.targetStudent = document.getElementById('target-student');
         this.targetBehavior = document.getElementById('target-behavior');
+        this.modal = document.getElementById('modal-container');
+        this.modalTitle = document.getElementById('modal-title');
+        this.modalBody = document.getElementById('modal-body');
+        this.modalCancel = document.getElementById('modal-cancel');
+        this.modalSave = document.getElementById('modal-save');
     },
 
     bindEvents() {
+        this.modalCancel.onclick = () => this.closeModal();
+
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', () => this.switchView(item.getAttribute('data-view')));
         });
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('sub-tab')) {
-                this.switchSubTab(e.target.getAttribute('data-sub'));
+
+        // Global Action Delegation
+        document.body.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+
+            const action = target.getAttribute('data-action');
+            const id = target.getAttribute('data-id');
+            const group = target.getAttribute('data-group');
+            const value = target.getAttribute('data-value');
+
+            console.log('Action Clicked:', action, { id, group, value });
+
+            if (action === 'switch-sub-tab') {
+                this.switchSubTab(target.getAttribute('data-sub'));
+            } else if (action === 'history-edit') {
+                this.toggleEditLog(id);
+            } else if (action === 'history-delete') {
+                this.deleteLogConfirm(id);
+            } else if (action === 'history-save-edit') {
+                this.saveLogEdit(id);
+            } else if (action === 'history-cancel-edit') {
+                this.toggleEditLog(null);
+            } else if (action === 'export-csv') {
+                this.exportCSV();
+            } else if (action === 'select-chip') {
+                this.selectChip(group, value);
+            } else if (action === 'add-abc-tag') {
+                this.addABCTagPrompt(group);
+            } else if (action === 'remove-abc-tag') {
+                e.stopPropagation();
+                this.removeABCTag(group, value);
+            } else if (action === 'add-student') {
+                this.addStudentPrompt();
+            } else if (action === 'edit-student') {
+                e.stopPropagation();
+                this.editStudent(id);
+            } else if (action === 'remove-student') {
+                e.stopPropagation();
+                this.removeStudent(id);
+            } else if (action === 'add-behavior') {
+                this.addBehaviorPrompt(id);
+            } else if (action === 'remove-behavior') {
+                e.stopPropagation();
+                this.removeBehavior(id);
+            } else if (action === 'select-behavior') {
+                const sid = target.getAttribute('data-student-id');
+                this.selectBehavior(sid, id);
+            } else if (action === 'clear-data') {
+                this.clearData();
+            } else if (action === 'save-abc') {
+                this.saveABC();
+            } else if (action === 'capture-report') {
+                this.captureReport();
+            } else if (action === 'generate-ai-prompt') {
+                this.generateAIPrompt();
             }
         });
     },
@@ -86,7 +152,7 @@ const App = {
     },
 
     renderCurrentView() {
-        this.renderSharedContext(); // 헤더 정보는 항상 최신화
+        this.renderSharedContext();
         if (this.currentView === 'record-panel') {
             this.renderRecordPanel();
         }
@@ -109,7 +175,6 @@ const App = {
         this.postRenderRecord();
     },
 
-    // Helper: 현재 날짜/시간 (분리 입력용)
     getNowDate() {
         const now = new Date();
         return now.toISOString().slice(0, 10);
@@ -151,26 +216,27 @@ const App = {
         `;
     },
 
-    // --- 리팩토링된 ABC UI 헬퍼 ---
-    getChipHtml(group, items, selectedValue) {
+    getChipHtml(group, items, selectedValues) {
         return `
-            <div class="chip-group ${group === 'settingEvent' ? 'chip-scroll' : ''}">
+            <div class="chip-group">
                 ${items.map(item => `
-                    <div class="chip ${selectedValue === item ? 'active' : ''}" 
-                         onclick="App.selectChip('${group}', '${item}')">
-                        ${item}
+                    <div class="chip ${selectedValues.includes(item) ? 'active' : ''}" 
+                         data-action="select-chip" data-group="${group}" data-value="${item}">
+                        <span class="chip-text">${item}</span>
+                        <div class="chip-delete" data-action="remove-abc-tag" data-group="${group}" data-value="${item}">
+                            &times;
+                        </div>
                     </div>
                 `).join('')}
             </div>`;
     },
 
-    // 현재 시간 기반 교시 자동 추정
     getCurrentPeriod() {
         const now = new Date();
         const mins = now.getHours() * 60 + now.getMinutes();
         const ranges = [
             [520, 560], [570, 610], [620, 660], [670, 710], [780, 820], [830, 870]
-        ]; // 1~6교시
+        ];
         for (let i = 0; i < ranges.length; i++) {
             if (mins >= ranges[i][0] && mins < ranges[i][1]) return (i + 1).toString();
         }
@@ -178,11 +244,11 @@ const App = {
     },
 
     selectChip(group, value) {
-        // 이미 선택된 걸 다시 누르면 해제 (기능적 요구사항에 따라 조절 가능)
-        if (this.abcSession[group] === value) {
-            this.abcSession[group] = '';
+        const arr = this.abcSession[group];
+        if (arr.includes(value)) {
+            this.abcSession[group] = arr.filter(v => v !== value);
         } else {
-            this.abcSession[group] = value;
+            this.abcSession[group].push(value);
         }
         this.renderRecordPanel();
     },
@@ -196,41 +262,38 @@ const App = {
 
     getABCHtml() {
         const s = this.abcSession;
+        const tags = Storage.getABCTags();
+
+        const section = (id, label, category) => `
+            <div class="abc-field">
+                <div class="abc-label-row">
+                    <label>${label}</label>
+                    <button class="btn-add-tag" data-action="add-abc-tag" data-group="${category}">+</button>
+                </div>
+                ${this.getChipHtml(category, tags[category] || [], s[category])}
+                <input type="text" class="abc-custom-input" placeholder="직접 입력..." 
+                       value="${s[category + 'Custom'] || ''}" oninput="App.abcSession['${category}Custom']=this.value">
+            </div>
+        `;
+
         return `
             <div class="fab-container">
                 <div class="card" style="padding: 20px 16px; margin-bottom: 80px;">
-                    <div class="abc-field">
-                        <label>1. 배경 사건 (Condition)</label>
-                        ${this.getChipHtml('settingEvent', ['평소와 같음', '수면 부족', '약 미복용', '가정 내 사건', '날씨 영향', '피로함'], s.settingEvent)}
-                    </div>
-
-                    <div class="abc-field">
-                        <label>2. 선행사건 (Antecedent)</label>
-                        ${this.getChipHtml('a', ['개별 과제 시작', '교사 지시', '교실 소음', '강화물 제거', '쉬는 시간 종료', '또래 갈등'], s.a)}
-                    </div>
-
-                    <div class="abc-field">
-                        <label>3. 행동 세부 유형 (Behavior Type)</label>
-                        ${this.getChipHtml('bDetail', ['언어적 폭발', '신체적 공격', '수업 이탈', '기물 파손', '지시 불이행'], s.bDetail)}
-                    </div>
-
-                    <div class="abc-field">
-                        <label>4. 결과 (Consequence)</label>
-                        ${this.getChipHtml('c', ['교사의 훈육', '과제 중단/수정', '강화물 제거', '친구들의 반응', '타임아웃/격리', '무시하기'], s.c)}
-                    </div>
+                    ${section(1, '1. 배경 사건 (Condition)', 'settingEvent')}
+                    ${section(2, '2. 선행사건 (Antecedent)', 'a')}
+                    ${section(3, '3. 행동 세부 유형 (Behavior Type)', 'bDetail')}
+                    ${section(4, '4. 결과 (Consequence)', 'c')}
 
                     <div class="abc-field">
                         <label>5. 메모 (선택)</label>
                         <div class="note-container">
-                            <textarea id="abc-note" placeholder="추가 설명..." rows="2"></textarea>
-                            <button class="btn-stt" onclick="App.showToast('음성 인식 기능을 준비 중입니다')">
-                                <i class="lucide-mic"></i>
-                            </button>
+                            <textarea id="abc-note" placeholder="추가 설명..." rows="2" 
+                                      oninput="App.abcSession.note=this.value">${s.note || ''}</textarea>
                         </div>
                     </div>
                 </div>
                 
-                <button class="fab-save" onclick="App.saveABC()">
+                <button class="fab-save" data-action="save-abc">
                     <i class="lucide-check"></i> ABC 스냅샷 저장
                 </button>
             </div>
@@ -239,13 +302,11 @@ const App = {
 
     getQuickHtml() {
         const running = this.quickTimer.running;
-
         const logs = Storage.getLogs().filter(l =>
             l.studentId === this.session.currentStudentId &&
             l.behaviorId === this.session.currentBehaviorId &&
             new Date(l.timestamp).toDateString() === new Date().toDateString()
         );
-
         const count = logs.length;
         const totalDur = logs.reduce((sum, l) => sum + (l.details.durationSeconds || 0), 0);
 
@@ -284,40 +345,27 @@ const App = {
     handleQuickStart(e) {
         if (e && e.type === 'touchstart') e.preventDefault();
         if (this.quickTimer.running) return;
-
-        // Long press detection: after 500ms, start duration timer
-        this.quickTimer.longPressTimer = setTimeout(() => {
-            this.startQuickDuration();
-        }, 500);
+        this.quickTimer.longPressTimer = setTimeout(() => { this.startQuickDuration(); }, 500);
     },
 
     handleQuickEnd(e) {
         if (e && e.type === 'touchend') e.preventDefault();
         clearTimeout(this.quickTimer.longPressTimer);
-
-        if (this.quickTimer.running) {
-            this.stopQuickDuration();
-        } else {
-            // If released before 500ms, it's a simple click (frequency)
-            this.logQuickEvent();
-        }
+        if (this.quickTimer.running) { this.stopQuickDuration(); }
+        else { this.logQuickEvent(); }
     },
 
     logQuickEvent() {
         const ts = this.readDateTimeFromInputs('global-date', 'global-time');
         const period = document.getElementById('global-period').value;
         const subject = document.getElementById('global-subject').value;
-
         Storage.addLog({
             studentId: this.session.currentStudentId,
             behaviorId: this.session.currentBehaviorId,
             behaviorType: this.targetBehavior.innerText,
             recordMethod: 'event',
             timestamp: ts,
-            details: {
-                period: period,
-                subject: subject
-            }
+            details: { period, subject }
         });
         this.showToast('빈도가 기록되었습니다.');
         this.renderRecordPanel();
@@ -326,14 +374,11 @@ const App = {
     startQuickDuration() {
         this.quickTimer.running = true;
         this.quickTimer.startTime = Date.now();
-
-        // DOM을 통째로 갈아끼우지 않고 페이지만 살짝 변경 (이벤트 끊김 방지)
         const btn = document.getElementById('quick-btn');
         if (btn) {
             btn.classList.add('running');
             btn.innerText = '측정 중...';
         }
-
         const display = document.getElementById('quick-timer-display');
         const logs = Storage.getLogs().filter(l =>
             l.studentId === this.session.currentStudentId &&
@@ -341,7 +386,6 @@ const App = {
             new Date(l.timestamp).toDateString() === new Date().toDateString()
         );
         const prevTotal = logs.reduce((sum, l) => sum + (l.details.durationSeconds || 0), 0);
-
         this.quickTimer.timerId = setInterval(() => {
             const elapsed = Math.floor((Date.now() - this.quickTimer.startTime) / 1000);
             if (display) display.innerText = this.formatTime(prevTotal + elapsed);
@@ -353,109 +397,45 @@ const App = {
         const ts = this.readDateTimeFromInputs('global-date', 'global-time');
         const period = document.getElementById('global-period').value;
         const subject = document.getElementById('global-subject').value;
-
         Storage.addLog({
             studentId: this.session.currentStudentId,
             behaviorId: this.session.currentBehaviorId,
             behaviorType: this.targetBehavior.innerText,
             recordMethod: 'event',
             timestamp: ts,
-            details: {
-                durationSeconds: elapsed,
-                period: period,
-                subject: subject
-            }
+            details: { durationSeconds: elapsed, period, subject }
         });
-
         this.quickTimer.running = false;
         clearInterval(this.quickTimer.timerId);
         this.showToast(`${elapsed}초 지속시간이 기록되었습니다.`);
-        this.renderRecordPanel(); // 종료 시에는 전체 리렌더링 허용
-    },
-
-    getFrequencyHtml() {
-        return `
-            <div class="counter-ui">
-                <div class="abc-field" style="text-align:left;margin-bottom:16px;">
-                <label>발생 시각 · 교시 · 과목</label>
-                <div class="datetime-row">
-                    <input type="date" id="freq-date" value="${this.getNowDate()}" />
-                    <input type="time" id="freq-time" value="${this.getNowTime()}" />
-                </div>
-                ${this.getPeriodSubjectHtml('freq')}
-            </div>
-                <button class="btn btn-large-plus" onclick="App.logFrequency()">+</button>
-                <div style="margin-top:20px;">
-                    <span style="font-size:0.9rem;color:var(--text-muted);">오늘 누적: </span>
-                    <span id="f-today-count" style="font-weight:800;color:var(--primary);font-size:2rem;">0</span>
-                </div>
-                <button class="btn btn-undo" onclick="App.undoLastLog()">
-                    <i class="lucide-undo-2"></i> 마지막 기록 취소
-                </button>
-            </div>
-        `;
-    },
-
-    getDurationHtml() {
-        const timer = this.timers.duration;
-        return `
-            <div class="timer-ui">
-                <div id="d-display" class="timer-display">00:00</div>
-                <button id="d-btn" class="btn btn-primary" style="width:100%;height:60px;" onclick="App.toggleDuration()">
-                    ${timer.running ? '종료 및 저장' : '시작'}
-                </button>
-            </div>
-        `;
-    },
-
-    getAccumulationHtml() {
-        const timer = this.timers.accumulated;
-        return `
-            <div class="timer-ui">
-                <div id="a-display" class="timer-display">${this.formatTime(timer.totalSeconds)}</div>
-                <button id="a-btn" class="btn btn-primary" style="width:100%;height:60px;" onclick="App.toggleAccumulation()">
-                    ${timer.running ? '일시정지 (PAUSE)' : '재생 (RESUME)'}
-                </button>
-                <button class="btn" style="width:100%;margin-top:12px;border:1px solid #ddd;" onclick="App.saveAccumulation()">
-                    현재까지 기록 저장하기
-                </button>
-            </div>
-        `;
+        this.renderRecordPanel();
     },
 
     postRenderRecord() {
-        if (this.currentSubTab === 'quick') {
-            const qs = this.quickSession;
-            if (qs.period) document.getElementById('quick-period').value = qs.period;
-            if (qs.subject) document.getElementById('quick-subject').value = qs.subject;
-
-            if (this.quickTimer.running) {
-                // Restore timer display if running
-                const display = document.getElementById('quick-timer-display');
-                const logs = Storage.getLogs().filter(l =>
-                    l.studentId === this.session.currentStudentId &&
-                    l.behaviorId === this.session.currentBehaviorId &&
-                    new Date(l.timestamp).toDateString() === new Date().toDateString()
-                );
-                const prevTotal = logs.reduce((sum, l) => sum + (l.details.durationSeconds || 0), 0);
-
-                clearInterval(this.quickTimer.timerId);
-                this.quickTimer.timerId = setInterval(() => {
-                    const elapsed = Math.floor((Date.now() - this.quickTimer.startTime) / 1000);
-                    if (display) display.innerText = this.formatTime(prevTotal + elapsed);
-                }, 1000);
-            }
+        if (this.currentSubTab === 'quick' && this.quickTimer.running) {
+            const display = document.getElementById('quick-timer-display');
+            const logs = Storage.getLogs().filter(l =>
+                l.studentId === this.session.currentStudentId &&
+                l.behaviorId === this.session.currentBehaviorId &&
+                new Date(l.timestamp).toDateString() === new Date().toDateString()
+            );
+            const prevTotal = logs.reduce((sum, l) => sum + (l.details.durationSeconds || 0), 0);
+            clearInterval(this.quickTimer.timerId);
+            this.quickTimer.timerId = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - this.quickTimer.startTime) / 1000);
+                if (display) display.innerText = this.formatTime(prevTotal + elapsed);
+            }, 1000);
         }
     },
-
-    // ========================
-    //  BUSINESS LOGIC
-    // ========================
 
     saveABC() {
         const ts = this.readDateTimeFromInputs('global-date', 'global-time');
         const s = this.abcSession;
-
+        const joinData = (tags, custom) => {
+            const all = [...tags];
+            if (custom.trim()) all.push(custom.trim());
+            return all.join(', ');
+        };
         Storage.addLog({
             studentId: this.session.currentStudentId,
             behaviorId: this.session.currentBehaviorId,
@@ -463,34 +443,32 @@ const App = {
             recordMethod: 'abc',
             timestamp: ts,
             details: {
-                settingEvent: s.settingEvent,
-                antecedent: s.a,
-                behaviorDetail: s.bDetail,
-                consequence: s.c,
+                settingEvent: joinData(s.settingEvent, s.settingEventCustom),
+                antecedent: joinData(s.a, s.aCustom),
+                behaviorDetail: joinData(s.bDetail, s.bDetailCustom),
+                consequence: joinData(s.c, s.cCustom),
                 note: document.getElementById('abc-note').value,
                 period: document.getElementById('global-period').value,
                 subject: document.getElementById('global-subject').value
             }
         });
-
         this.showToast('ABC 데이터가 기록되었습니다.');
-
-        // 입력 폼 초기화
-        this.abcSession = { settingEvent: '', a: '', bDetail: '', c: '' };
+        this.abcSession = {
+            settingEvent: [], a: [], bDetail: [], c: [],
+            settingEventCustom: '', aCustom: '', bDetailCustom: '', cCustom: ''
+        };
         this.renderRecordPanel();
     },
 
     undoLastLog() {
         const todayStr = new Date().toDateString();
-        const logs = Storage.getLogs();
-        const myLogs = logs.filter(l =>
+        const logs = Storage.getLogs().filter(l =>
             l.studentId === this.session.currentStudentId &&
             l.behaviorId === this.session.currentBehaviorId &&
-            new Date(l.timestamp).toDateString() === todayStr  // 오늘 기록만 대상
+            new Date(l.timestamp).toDateString() === todayStr
         );
-        if (myLogs.length === 0) return this.showToast('취소할 기록이 없습니다.');
-        const last = myLogs[myLogs.length - 1];
-        Storage.removeLog(last.id);
+        if (logs.length === 0) return this.showToast('취소할 기록이 없습니다.');
+        Storage.removeLog(logs[logs.length - 1].id);
         this.renderRecordPanel();
         this.showToast('마지막 기록이 취소되었습니다.');
     },
@@ -501,10 +479,8 @@ const App = {
         return `${m}:${s}`;
     },
 
-    // 레거시 타이머 함수 제거됨 (toggleDuration, toggleAccumulation, saveAccumulation, startTimerUI)
-
     // ========================
-    //  SETTINGS (Student/Behavior Management)
+    //  SETTINGS
     // ========================
 
     renderSettingsPanel() {
@@ -519,9 +495,9 @@ const App = {
             let behaviorsHtml = sBehaviors.map(b => {
                 const isBActive = b.id === currentBid && isActive;
                 return `
-                    <div class="behavior-item ${isBActive ? 'active' : ''}" onclick="App.selectBehavior('${s.id}','${b.id}')">
+                    <div class="behavior-item ${isBActive ? 'active' : ''}" data-action="select-behavior" data-student-id="${s.id}" data-id="${b.id}">
                         <span>${b.name}</span>
-                        <button class="btn-icon-sm" onclick="event.stopPropagation(); App.removeBehavior('${b.id}')">✕</button>
+                        <button class="btn-icon-sm" data-action="remove-behavior" data-id="${b.id}">✕</button>
                     </div>`;
             }).join('');
 
@@ -533,12 +509,12 @@ const App = {
                             <span class="student-info">${s.info || ''}</span>
                         </div>
                         <div>
-                            <button class="btn-icon-sm" onclick="App.editStudent('${s.id}')">✏️</button>
-                            <button class="btn-icon-sm" onclick="App.removeStudent('${s.id}')">🗑️</button>
+                            <button class="btn-icon-sm" data-action="edit-student" data-id="${s.id}">✏️</button>
+                            <button class="btn-icon-sm" data-action="remove-student" data-id="${s.id}">🗑️</button>
                         </div>
                     </div>
                     <div class="behavior-list">${behaviorsHtml}</div>
-                    <button class="btn btn-sm" onclick="App.addBehaviorPrompt('${s.id}')">+ 관찰행동 추가</button>
+                    <button class="btn btn-sm" data-action="add-behavior" data-id="${s.id}">+ 관찰행동 추가</button>
                 </div>`;
         }).join('');
 
@@ -546,16 +522,16 @@ const App = {
             <div class="section-title">학생 · 관찰행동 관리</div>
             ${studentsHtml}
             <div style="padding:0 20px 12px;">
-                <button class="btn btn-primary" style="width:100%;" onclick="App.addStudentPrompt()">
+                <button class="btn btn-primary" style="width:100%;" data-action="add-student">
                     <i class="lucide-user-plus"></i> 새 학생 추가
                 </button>
             </div>
             <div class="section-title">데이터 관리</div>
             <div class="card">
-                <button class="btn btn-primary" style="width:100%;margin-bottom:10px;" onclick="App.exportCSV()">
+                <button class="btn btn-primary" style="width:100%;margin-bottom:10px;" data-action="export-csv">
                     <i class="lucide-file-text"></i> CSV 내보내기
                 </button>
-                <button class="btn btn-danger" style="width:100%;" onclick="App.clearData()">
+                <button class="btn btn-danger" style="width:100%;" data-action="clear-data">
                     <i class="lucide-trash-2"></i> 전체 초기화
                 </button>
             </div>
@@ -571,64 +547,72 @@ const App = {
     },
 
     addStudentPrompt() {
-        const name = prompt('학생 이름:');
-        if (!name) return;
-        const info = prompt('학급 정보 (예: 2학년 1반):') || '';
-        const id = Storage.addStudent(name, info);
-        // 기본 행동 하나 추가
-        const bid = Storage.addBehavior(id, '기본 행동');
-        this.session.currentStudentId = id;
-        this.session.currentBehaviorId = bid;
-        Storage.save(Storage.KEYS.SETTINGS, this.session);
-        this.updateHeaderInfo();
-        this.renderSettingsPanel();
+        this.showModal('새 학생 추가', [
+            { id: 'name', label: '학생 이름', placeholder: '이름 입력', required: true },
+            { id: 'info', label: '학급 정보', placeholder: '예: 2학년 1반' }
+        ], (data) => {
+            const id = Storage.addStudent(data.name, data.info);
+            const bid = Storage.addBehavior(id, '기본 행동');
+            this.session.currentStudentId = id;
+            this.session.currentBehaviorId = bid;
+            Storage.save(Storage.KEYS.SETTINGS, this.session);
+            this.updateHeaderInfo();
+            this.renderSettingsPanel();
+            this.showToast('학생이 추가되었습니다.');
+        });
     },
 
     editStudent(id) {
         const students = Storage.get(Storage.KEYS.STUDENTS);
-        const s = students.find(s => s.id === id);
-        const name = prompt('학생 이름:', s.name);
-        if (!name) return;
-        const info = prompt('학급 정보:', s.info || '');
-        Storage.updateStudent(id, name, info);
-        this.updateHeaderInfo();
-        this.renderSettingsPanel();
+        const s = students.find(x => x.id === id);
+        this.showModal('학생 정보 수정', [
+            { id: 'name', label: '학생 이름', value: s.name, required: true },
+            { id: 'info', label: '학급 정보', value: s.info || '' }
+        ], (data) => {
+            Storage.updateStudent(id, data.name, data.info);
+            this.updateHeaderInfo();
+            this.renderSettingsPanel();
+        });
     },
 
     removeStudent(id) {
-        if (!confirm('이 학생의 모든 데이터가 삭제됩니다. 계속하시겠습니까?')) return;
-        Storage.deleteStudent(id);
-        const students = Storage.get(Storage.KEYS.STUDENTS);
-        if (students.length > 0) {
-            this.session.currentStudentId = students[0].id;
-            const behaviors = Storage.get(Storage.KEYS.BEHAVIORS).filter(b => b.studentId === students[0].id);
-            this.session.currentBehaviorId = behaviors.length > 0 ? behaviors[0].id : '';
-        }
-        Storage.save(Storage.KEYS.SETTINGS, this.session);
-        this.updateHeaderInfo();
-        this.renderSettingsPanel();
+        this.showConfirm('학생 삭제', '이 학생의 모든 데이터가 삭제됩니다. 계속하시겠습니까?', () => {
+            Storage.deleteStudent(id);
+            const students = Storage.get(Storage.KEYS.STUDENTS);
+            if (students.length > 0) {
+                this.session.currentStudentId = students[0].id;
+                const behaviors = Storage.get(Storage.KEYS.BEHAVIORS).filter(b => b.studentId === students[0].id);
+                this.session.currentBehaviorId = behaviors.length > 0 ? behaviors[0].id : '';
+            }
+            Storage.save(Storage.KEYS.SETTINGS, this.session);
+            this.updateHeaderInfo();
+            this.renderSettingsPanel();
+            this.showToast('학생이 삭제되었습니다.');
+        });
     },
 
     addBehaviorPrompt(studentId) {
-        const name = prompt('관찰 타겟 행동명:');
-        if (!name) return;
-        const bid = Storage.addBehavior(studentId, name);
-        // 자동 선택
-        this.session.currentStudentId = studentId;
-        this.session.currentBehaviorId = bid;
-        Storage.save(Storage.KEYS.SETTINGS, this.session);
-        this.updateHeaderInfo();
-        this.renderSettingsPanel();
+        this.showModal('관찰행동 추가', [
+            { id: 'name', label: '관찰 타겟 행동명', placeholder: '행동명 입력', required: true }
+        ], (data) => {
+            const bid = Storage.addBehavior(studentId, data.name);
+            this.session.currentStudentId = studentId;
+            this.session.currentBehaviorId = bid;
+            Storage.save(Storage.KEYS.SETTINGS, this.session);
+            this.updateHeaderInfo();
+            this.renderSettingsPanel();
+        });
     },
 
     removeBehavior(id) {
-        if (!confirm('이 행동을 삭제하시겠습니까?')) return;
-        Storage.deleteBehavior(id);
-        this.renderSettingsPanel();
+        this.showConfirm('행동 삭제', '이 행동을 삭제하시겠습니까?', () => {
+            Storage.deleteBehavior(id);
+            this.renderSettingsPanel();
+        });
     },
 
     // ========================
-    //  EXPORT
+    //  EXPORT & REPORT
     // ========================
 
     exportCSV() {
@@ -636,24 +620,20 @@ const App = {
         if (logs.length === 0) return alert('기록된 데이터가 없습니다.');
         const students = Storage.get(Storage.KEYS.STUDENTS) || [];
         const behaviors = Storage.get(Storage.KEYS.BEHAVIORS) || [];
-
         let csv = '\uFEFFID,학생,행동,기록유형,날짜,시간,교시,배경사건,선행사건,행동세부,결과,지속시간(초),메모\n';
         logs.forEach(l => {
             const d = l.details || {};
             const st = students.find(s => s.id === l.studentId);
             const bh = behaviors.find(b => b.id === l.behaviorId);
             const dt = new Date(l.timestamp);
-
-            // Simplified export format
             csv += `${l.id},"\"${st ? st.name : l.studentId}\"","\"${bh ? bh.name : l.behaviorId}\"","${l.recordMethod}","${dt.toLocaleDateString('ko-KR')}","${dt.toLocaleTimeString('ko-KR')}",` +
                 `"${d.period || ''}","${d.settingEvent || ''}","${d.antecedent || ''}","${d.behaviorDetail || ''}","${d.consequence || ''}",${d.durationSeconds || ''},"\"${d.note || ''}\"\n`;
         });
-
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.setAttribute('href', url);
-        link.setAttribute('download', `pbs_data_${new Date().toISOString().split('T')[0]}.csv`);
+        link.href = url;
+        link.download = `pbs_data_${new Date().toISOString().split('T')[0]}.csv`;
         link.click();
     },
 
@@ -667,50 +647,33 @@ const App = {
         });
     },
 
-    // ========================
-    //  AI PROMPT
-    // ========================
-
     generateAIPrompt() {
         const logs = Storage.getLogs().filter(l =>
             l.studentId === this.session.currentStudentId &&
             l.behaviorId === this.session.currentBehaviorId
         );
-        if (logs.length === 0) return alert('현재 선택된 학생/행동에 대한 데이터가 없습니다.');
-
+        if (logs.length === 0) return alert('데이터가 없습니다.');
         const studentName = this.targetStudent.innerText;
         const behaviorName = this.targetBehavior.innerText;
-
         const freqLogs = logs.filter(l => l.recordMethod === 'event');
         const durLogs = logs.filter(l => l.recordMethod === 'event' && l.details.durationSeconds);
         const abcLogs = logs.filter(l => l.recordMethod === 'abc');
-
         const freqByDate = {};
         freqLogs.forEach(l => { const d = new Date(l.timestamp).toLocaleDateString('ko-KR'); freqByDate[d] = (freqByDate[d] || 0) + 1; });
         let freqSummary = Object.entries(freqByDate).map(([d, c]) => `  - ${d}: ${c}회`).join('\n') || '  (없음)';
-
         let durSummary = durLogs.map(l => {
             const s = l.details.durationSeconds || 0;
             return `  - ${new Date(l.timestamp).toLocaleDateString('ko-KR')} [${l.recordMethod}]: ${Math.floor(s / 60)}분 ${s % 60}초`;
         }).join('\n') || '  (없음)';
-
         let abcSummary = abcLogs.map(l => {
             return `  - ${new Date(l.timestamp).toLocaleDateString('ko-KR')}: A(${l.details.antecedent}) → B(${behaviorName}) → C(${l.details.consequence})${l.details.note ? ' [' + l.details.note + ']' : ''}`;
         }).join('\n') || '  (없음)';
-
-        const prompt = `다음은 학생 "${studentName}"의 문제행동 "${behaviorName}"에 대한 PBS 관찰 기록입니다.\n\n이 데이터를 바탕으로:\n1. 행동의 기능(Function) 분석\n2. 기능평가(FBA) 가설 설정\n3. 긍정적 행동지원 개입 전략 제시\n를 수행해 주세요.\n\n---\n■ 빈도 기록:\n${freqSummary}\n\n■ 지속시간:\n${durSummary}\n\n■ ABC 사건 기록:\n${abcSummary}\n---\n총 ${logs.length}건 (${new Date(logs[0].timestamp).toLocaleDateString('ko-KR')} ~ ${new Date(logs[logs.length - 1].timestamp).toLocaleDateString('ko-KR')})`;
-
-        navigator.clipboard.writeText(prompt).then(() => {
-            alert('✅ AI 프롬프트가 클립보드에 복사되었습니다!');
-        }).catch(() => {
-            const ta = document.createElement('textarea'); ta.value = prompt;
-            document.body.appendChild(ta); ta.select(); document.execCommand('copy');
-            document.body.removeChild(ta); alert('✅ 복사 완료!');
-        });
+        const prompt = `학생 "${studentName}"의 행동 "${behaviorName}" PBS 기록입니다.\n\n1. 기능 분석\n2. 가설 설정\n3. 개입 전략\n\n■ 빈도:\n${freqSummary}\n■ 지속시간:\n${durSummary}\n■ ABC:\n${abcSummary}`;
+        navigator.clipboard.writeText(prompt).then(() => { alert('✅ 복사되었습니다!'); });
     },
 
     // ========================
-    //  INSIGHT (Charts + Real Heatmap)
+    //  INSIGHT
     // ========================
 
     renderInsightPanel() {
@@ -720,12 +683,10 @@ const App = {
     initCharts() {
         const ctx = document.getElementById('mainChart');
         if (!ctx) return;
-
         const logs = Storage.getLogs().filter(l =>
             l.studentId === this.session.currentStudentId &&
             l.behaviorId === this.session.currentBehaviorId
         );
-
         const days = ['일', '월', '화', '수', '목', '금', '토'];
         const last7 = [...Array(7)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); return d; });
         const freqData = last7.map(date => logs.filter(l => l.recordMethod === 'event' && new Date(l.timestamp).toDateString() === date.toDateString()).length);
@@ -733,7 +694,6 @@ const App = {
             const dl = logs.filter(l => l.recordMethod === 'event' && l.details.durationSeconds && new Date(l.timestamp).toDateString() === date.toDateString());
             return +(dl.reduce((s, l) => s + (l.details.durationSeconds || 0), 0) / 60).toFixed(1);
         });
-
         new Chart(ctx, {
             type: 'bar',
             data: {
@@ -745,93 +705,37 @@ const App = {
             },
             options: { scales: { y: { position: 'left' }, y1: { position: 'right', grid: { drawOnChartArea: false } } } }
         });
-
-        const abcLogs = logs.filter(l => l.recordMethod === 'abc');
-        const cMap = {};
-        abcLogs.forEach(l => { const c = l.details.consequence || '기타'; cMap[c] = (cMap[c] || 0) + 1; });
-        const abcCtx = document.getElementById('abcChart');
-        if (Object.keys(cMap).length > 0) {
-            new Chart(abcCtx, {
-                type: 'doughnut',
-                data: { labels: Object.keys(cMap), datasets: [{ data: Object.values(cMap), backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'] }] },
-                options: { cutout: '70%' }
-            });
-        }
     },
 
     renderHeatmap() {
-        const heatmap = document.getElementById('heatmap');
+        const heatmap = document.getElementById('heatmap-grid');
         if (!heatmap) return;
         heatmap.innerHTML = '';
-        heatmap.style.display = 'grid';
-        heatmap.style.gridTemplateColumns = 'repeat(6, 1fr)';
-        heatmap.style.gap = '6px';
-
         const logs = Storage.getLogs().filter(l =>
             l.studentId === this.session.currentStudentId &&
             l.behaviorId === this.session.currentBehaviorId
         );
-
-        // 교시별 시간 매핑 (08:40 ~ 14:50)
-        const periodRanges = [
-            { start: 8 * 60 + 40, end: 9 * 60 + 20 },   // 1교시
-            { start: 9 * 60 + 30, end: 10 * 60 + 10 },   // 2교시
-            { start: 10 * 60 + 20, end: 11 * 60 },        // 3교시
-            { start: 11 * 60 + 10, end: 11 * 60 + 50 },   // 4교시
-            { start: 13 * 60, end: 13 * 60 + 40 },        // 5교시
-            { start: 13 * 60 + 50, end: 14 * 60 + 30 }    // 6교시
-        ];
-
-        // Count per (dayOfWeek, period)
         const grid = {};
-        for (let p = 0; p < 6; p++) for (let d = 1; d <= 5; d++) grid[`${d}-${p}`] = 0;
-
+        let maxVal = 1;
         logs.forEach(l => {
-            const dt = new Date(l.timestamp);
-            const dow = dt.getDay();
-            if (dow < 1 || dow > 5) return;
-
-            // Use explicitly recorded period if available
-            let periodIdx = -1;
-            if (l.details && l.details.period && !isNaN(l.details.period)) {
-                periodIdx = parseInt(l.details.period) - 1;
-            } else {
-                // Fallback: guess from timestamp
-                const mins = dt.getHours() * 60 + dt.getMinutes();
-                for (let p = 0; p < 6; p++) {
-                    if (mins >= periodRanges[p].start && mins < periodRanges[p].end) {
-                        periodIdx = p;
-                        break;
-                    }
+            const d = new Date(l.timestamp);
+            const day = d.getDay();
+            const hour = d.getHours();
+            if (day >= 1 && day <= 5) {
+                const p = this.getPeriodByHour(hour);
+                if (p) {
+                    const k = `${day}-${p}`;
+                    grid[k] = (grid[k] || 0) + 1;
+                    if (grid[k] > maxVal) maxVal = grid[k];
                 }
             }
-            if (periodIdx >= 0 && periodIdx < 6) {
-                grid[`${dow}-${periodIdx}`]++;
-            }
         });
-
-        const maxVal = Math.max(1, ...Object.values(grid));
-
-        // Header
-        ['', '월', '화', '수', '목', '금'].forEach(d => {
-            const div = document.createElement('div');
-            div.innerText = d;
-            div.style.cssText = 'font-size:0.7rem;text-align:center;font-weight:700;';
-            heatmap.appendChild(div);
-        });
-
-        for (let p = 0; p < 6; p++) {
-            const pLabel = document.createElement('div');
-            pLabel.innerText = `${p + 1}교시`;
-            pLabel.style.cssText = 'font-size:0.6rem;text-align:center;display:flex;align-items:center;justify-content:center;';
-            heatmap.appendChild(pLabel);
-
+        for (let p = 1; p <= 6; p++) {
             for (let d = 1; d <= 5; d++) {
-                const count = grid[`${d}-${p}`];
+                const count = grid[`${d}-${p}`] || 0;
                 const cell = document.createElement('div');
                 const intensity = count / maxVal;
-                cell.style.height = '28px';
-                cell.style.borderRadius = '6px';
+                cell.className = 'heatmap-cell';
                 cell.style.background = count > 0 ? `rgba(99, 102, 241, ${0.15 + intensity * 0.85})` : '#f1f5f9';
                 cell.title = `${count}건`;
                 if (count > 0) {
@@ -843,102 +747,106 @@ const App = {
         }
     },
 
-    clearData() {
-        if (confirm('모든 데이터를 초기화하시겠습니까?')) { Storage.clearAll(); location.reload(); }
+    getPeriodByHour(h) {
+        if (h === 9) return 1; if (h === 10) return 2; if (h === 11) return 3;
+        if (h === 13) return 4; if (h === 14) return 5; if (h === 15) return 6;
+        return null;
     },
 
     // ========================
-    //  HISTORY PANEL & EDITING
+    //  HISTORY PANEL
     // ========================
 
     renderHistoryPanel() {
+        const selector = document.getElementById('history-student-selector');
         const historyList = document.getElementById('history-list');
-        if (!historyList) return;
-
+        if (!selector || !historyList) return;
+        const students = Storage.get(Storage.KEYS.STUDENTS) || [];
+        if (!this.historySelectedStudentId && students.length > 0) {
+            this.historySelectedStudentId = students[0].id;
+        }
+        selector.innerHTML = students.map(s => `
+            <div class="student-chip ${this.historySelectedStudentId === s.id ? 'active' : ''}" 
+                 onclick="App.setHistoryStudent('${s.id}')">
+                ${s.name}
+            </div>
+        `).join('');
         const logs = Storage.getLogs()
-            .filter(l => l.studentId === this.session.currentStudentId)
+            .filter(l => l.studentId === this.historySelectedStudentId)
             .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
         if (logs.length === 0) {
-            historyList.innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">기록된 데이터가 없습니다.</p>';
+            historyList.innerHTML = '<p style="text-align:center; padding:100px 40px; color:var(--text-muted);">기록이 없습니다.</p>';
             return;
         }
+        historyList.innerHTML = logs.map(l => this.editingLogId === l.id ? this.getHistoryEditHtml(l) : this.getHistoryCardHtml(l)).join('');
+    },
 
-        historyList.innerHTML = logs.map(l => this.getHistoryCardHtml(l)).join('');
+    setHistoryStudent(sid) {
+        this.historySelectedStudentId = sid;
+        this.renderHistoryPanel();
     },
 
     getHistoryCardHtml(log) {
-        const dt = new Date(log.timestamp);
-        const dateStr = dt.toLocaleDateString('ko-KR');
-        const timeStr = dt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
         const d = log.details || {};
-        const isEditing = this.editingLogId === log.id;
-
-        const badgeClass = log.recordMethod === 'abc' ? 'badge-abc' : 'badge-quick';
-        const badgeText = log.recordMethod === 'abc' ? 'ABC' : '간편';
-
-        let content = '';
-        if (log.recordMethod === 'abc') {
-            content = `A: ${d.antecedent || '-'} | B: ${log.behaviorType} | C: ${d.consequence || '-'}`;
-        } else {
-            const dur = d.durationSeconds ? ` (${this.formatTime(d.durationSeconds)})` : '';
-            content = `${log.behaviorType}${dur}`;
-        }
-
-        if (isEditing) {
-            return `
-                <div class="history-card">
-                    <div class="edit-row">
-                        <div class="edit-group">
-                            <label>날짜</label>
-                            <input type="date" id="edit-date-${log.id}" value="${dt.toISOString().slice(0, 10)}">
-                        </div>
-                        <div class="edit-group">
-                            <label>시간</label>
-                            <input type="time" id="edit-time-${log.id}" value="${dt.toTimeString().slice(0, 5)}">
-                        </div>
-                        <div class="edit-group">
-                            <label>교시</label>
-                            <select id="edit-period-${log.id}">
-                                <option value="">교시</option>
-                                ${[1, 2, 3, 4, 5, 6].map(p => `<option value="${p}"${d.period == p ? ' selected' : ''}>${p}교시</option>`).join('')}
-                                <option value="쉬는시간"${d.period === '쉬는시간' ? ' selected' : ''}>쉬는시간</option>
-                                <option value="점심"${d.period === '점심' ? ' selected' : ''}>점심</option>
-                            </select>
-                        </div>
-                        <div class="edit-group">
-                            <label>과목</label>
-                            <select id="edit-subject-${log.id}">
-                                <option value="">과목</option>
-                                ${['국어', '수학', '영어', '사회', '과학', '음악', '미술', '체육', '도덕', '실과', '창체', '기타']
-                    .map(s => `<option${d.subject === s ? ' selected' : ''}>${s}</option>`).join('')}
-                            </select>
-                        </div>
-                    </div>
-                    <div class="history-actions">
-                        <button class="btn-edit" onclick="App.toggleEditLog(null)">취소</button>
-                        <button class="btn-edit btn-save-edit" onclick="App.saveLogEdit('${log.id}')">저장</button>
-                    </div>
-                </div>
-            `;
-        }
-
+        const dateStr = new Date(log.timestamp).toLocaleDateString('ko-KR');
+        const timeStr = new Date(log.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        const badgeClass = log.recordMethod === 'abc' ? 'm-abc' : 'm-quick';
+        const badgeText = log.recordMethod === 'abc' ? 'ABC SNAPSHOT' : 'QUICK EVENT';
         return `
             <div class="history-card">
                 <div class="history-card-header">
-                    <div>
+                    <div class="history-time-box">
                         <span class="history-time">${timeStr}</span>
-                        <span class="history-meta">${dateStr} · ${d.period || '-'}교시 · ${d.subject || '-'}</span>
+                        <span class="history-meta">${dateStr} · ${d.period ? d.period + '교시' : '-'} · ${d.subject || '-'}</span>
                     </div>
-                    <span class="history-badge ${badgeClass}">${badgeText}</span>
+                    <div class="history-badges"><span class="badge-method ${badgeClass}">${badgeText}</span></div>
                 </div>
-                <div class="history-content">${content}</div>
+                <div class="history-behavior-row">
+                    <span class="history-behavior">${log.behaviorType}</span>
+                    ${d.durationSeconds ? `<span class="history-duration"><i class="lucide-clock" style="font-size:0.8rem;"></i> ${this.formatTime(d.durationSeconds)}</span>` : ''}
+                </div>
+                ${log.recordMethod === 'abc' ? `
+                    <div class="history-section">
+                        <span class="section-label">ABC ANALYSIS</span>
+                        <div class="abc-data-grid">
+                            ${d.settingEvent ? `<div class="abc-item"><strong>배경:</strong> ${this.formatABCItem(d.settingEvent)}</div>` : ''}
+                            ${d.antecedent ? `<div class="abc-item"><strong>선행:</strong> ${this.formatABCItem(d.antecedent)}</div>` : ''}
+                            ${d.behaviorDetail ? `<div class="abc-item"><strong>내용:</strong> ${this.formatABCItem(d.behaviorDetail)}</div>` : ''}
+                            ${d.consequence ? `<div class="abc-item"><strong>결과:</strong> ${this.formatABCItem(d.consequence)}</div>` : ''}
+                        </div>
+                    </div>
+                ` : ''}
+                ${d.note ? `<div class="history-note">${d.note}</div>` : ''}
                 <div class="history-actions">
-                    <button class="btn-edit" onclick="App.toggleEditLog('${log.id}')">수정</button>
-                    <button class="btn-edit" style="color:#ef4444;" onclick="App.deleteLogConfirm('${log.id}')">삭제</button>
+                    <button class="btn-history-action" data-action="history-edit" data-id="${log.id}">수정</button>
+                    <button class="btn-history-action" data-action="history-delete" data-id="${log.id}">삭제</button>
                 </div>
-            </div>
-        `;
+            </div>`;
+    },
+
+    getHistoryEditHtml(l) {
+        const d = l.details || {};
+        const dt = new Date(l.timestamp).toISOString();
+        return `
+            <div class="history-card editing">
+                <div class="edit-grid">
+                    <input type="date" id="edit-date-${l.id}" value="${dt.split('T')[0]}">
+                    <input type="time" id="edit-time-${l.id}" value="${dt.split('T')[1].slice(0, 5)}">
+                </div>
+                <div class="edit-fields">
+                    <input type="text" id="edit-b-${l.id}" value="${l.behaviorType}" placeholder="행동명">
+                    <textarea id="edit-note-${l.id}" placeholder="메모">${d.note || ''}</textarea>
+                </div>
+                <div class="history-actions">
+                    <button class="btn-history-action btn-primary" data-action="history-save-edit" data-id="${l.id}">저장</button>
+                    <button class="btn-history-action" data-action="history-cancel-edit">취소</button>
+                </div>
+            </div>`;
+    },
+
+    formatABCItem(text) {
+        if (!text) return '-';
+        return text.split(', ').map(t => `<span class="abc-tag-sm">${t}</span>`).join('');
     },
 
     toggleEditLog(logId) {
@@ -949,32 +857,82 @@ const App = {
     saveLogEdit(logId) {
         const newDate = document.getElementById(`edit-date-${logId}`).value;
         const newTime = document.getElementById(`edit-time-${logId}`).value;
-        const newPeriod = document.getElementById(`edit-period-${logId}`).value;
-        const newSubject = document.getElementById(`edit-subject-${logId}`).value;
-
+        const newB = document.getElementById(`edit-b-${logId}`).value;
+        const newNote = document.getElementById(`edit-note-${logId}`).value;
         const newTimestamp = new Date(`${newDate}T${newTime}`).toISOString();
-
-        Storage.updateLog(logId, {
-            timestamp: newTimestamp,
-            details: {
-                ...Storage.getLogs().find(l => l.id === logId).details,
-                period: newPeriod,
-                subject: newSubject
-            }
-        });
-
+        const originalLog = Storage.getLogs().find(l => l.id === logId);
+        Storage.updateLog(logId, { timestamp: newTimestamp, behaviorType: newB, details: { ...originalLog.details, note: newNote } });
         this.editingLogId = null;
         this.renderHistoryPanel();
         this.showToast('기록이 수정되었습니다.');
     },
 
+    addABCTagPrompt(category) {
+        this.showModal('새 태그 추가', [{ id: 'tag', label: '태그 내용', required: true }], (data) => {
+            Storage.addABCTag(category, data.tag.trim());
+            this.renderRecordPanel();
+            this.showToast('태그가 추가되었습니다.');
+        });
+    },
+
+    removeABCTag(category, tag) {
+        this.showConfirm('태그 삭제', `'${tag}' 태그를 삭제하시겠습니까?`, () => {
+            Storage.removeABCTag(category, tag);
+            const arr = this.abcSession[category] || [];
+            this.abcSession[category] = arr.filter(v => v !== tag);
+            this.renderRecordPanel();
+            this.showToast('태그가 삭제되었습니다.');
+        });
+    },
+
     deleteLogConfirm(logId) {
-        if (confirm('이 기록을 정말 삭제하시겠습니까?')) {
+        this.showConfirm('기록 삭제', '정말 삭제하시겠습니까?', () => {
             Storage.removeLog(logId);
             this.renderHistoryPanel();
-            this.showToast('기록이 삭제되었습니다.');
-        }
+            this.showToast('삭제되었습니다.');
+        });
+    },
+
+    clearData() {
+        this.showConfirm('전체 초기화', '모든 데이터가 삭제됩니다. 계속하시겠습니까?', () => {
+            Storage.clearAll();
+            location.reload();
+        });
+    },
+
+    // Modal Helpers
+    showModal(title, fields, onSave) {
+        this.modalTitle.innerText = title;
+        this.modalBody.innerHTML = fields.map(f => `
+            <div style="margin-bottom:12px;">
+                <label>${f.label}</label>
+                <input type="text" id="modal-input-${f.id}" value="${f.value || ''}" placeholder="${f.placeholder || ''}">
+            </div>
+        `).join('');
+        this.modal.classList.remove('hidden');
+        this.modalSave.onclick = () => {
+            const res = {};
+            for (let f of fields) {
+                const val = document.getElementById(`modal-input-${f.id}`).value;
+                if (f.required && !val.trim()) return alert(`${f.label}을(를) 입력해주세요.`);
+                res[f.id] = val;
+            }
+            onSave(res);
+            this.closeModal();
+        };
+    },
+
+    showConfirm(title, message, onOk) {
+        this.modalTitle.innerText = title;
+        this.modalBody.innerHTML = `<p style="text-align:center; padding:10px 0;">${message}</p>`;
+        this.modal.classList.remove('hidden');
+        this.modalSave.onclick = () => { onOk(); this.closeModal(); };
+    },
+
+    closeModal() {
+        this.modal.classList.add('hidden');
     }
 };
 
+window.App = App;
 window.onload = () => App.init();

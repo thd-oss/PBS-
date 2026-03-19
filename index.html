@@ -34,7 +34,7 @@
                     <!-- 기록 시점 UI (컴팩트) -->
                 </div>
                 <div id="session-controls">
-                    <button class="btn-icon" onclick="App.exportCSV()"><i class="lucide-download"></i></button>
+                    <button class="btn-icon" data-action="export-csv"><i class="lucide-download"></i></button>
                 </div>
             </div>
             <div id="sub-header">
@@ -49,8 +49,8 @@
             <!-- 1. 기록 패널 -->
             <section id="record-panel" class="view">
                 <div class="sub-tabs">
-                    <button class="sub-tab active" data-sub="abc">ABC</button>
-                    <button class="sub-tab" data-sub="quick">간편 기록</button>
+                    <button class="sub-tab active" data-sub="abc" data-action="switch-sub-tab">ABC</button>
+                    <button class="sub-tab" data-sub="quick" data-action="switch-sub-tab">간편 기록</button>
                 </div>
                 <div id="record-content"></div>
             </section>
@@ -91,7 +91,12 @@
 
             <!-- 4. 전체 기록 -->
             <section id="history-panel" class="view hidden">
-                <div class="section-title">전체 기록</div>
+                <div class="history-header">
+                    <div class="section-title">전체 기록</div>
+                    <div id="history-student-selector">
+                        <!-- Student chips injected by JS -->
+                    </div>
+                </div>
                 <div id="history-list"></div>
             </section>
         </main>
@@ -114,23 +119,31 @@
                 <span>관리</span>
             </button>
         </nav>
-        <div id="toast"></div>
-    </div>
+        <div id="modal-container" class="hidden">
+            <div class="modal-content">
+                <h3 id="modal-title">입력</h3>
+                <div id="modal-body"></div>
+                <div class="modal-actions">
+                    <button id="modal-cancel" class="btn">취소</button>
+                    <button id="modal-save" class="btn btn-primary">저장</button>
+                </div>
+            </div>
+        </div>
 
-    <script src="js/storage.js"></script>
-    <script src="js/app.js"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                const swPath = window.location.pathname.includes('/PBS-/') ? '/PBS-/sw.js' : './sw.js';
-                navigator.serviceWorker.register(swPath).then((registration) => {
-                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                }, (err) => {
-                    console.log('ServiceWorker registration failed: ', err);
+        <script src="js/storage.js"></script>
+        <script src="js/app.js"></script>
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    const swPath = window.location.pathname.includes('/PBS-/') ? '/PBS-/sw.js' : './sw.js';
+                    navigator.serviceWorker.register(swPath).then((registration) => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    }, (err) => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
                 });
-            });
-        }
-    </script>
+            }
+        </script>
 </body>
 
 </html>
