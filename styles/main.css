@@ -958,6 +958,59 @@ h1 {
     color: #e11d48;
 }
 
+/* Bulk Actions */
+.history-bulk-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 16px;
+    margin-bottom: 12px;
+}
+
+.custom-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.custom-checkbox input {
+    display: none;
+}
+
+.checkmark {
+    width: 20px;
+    height: 20px;
+    background-color: white;
+    border: 2px solid #cbd5e1;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.custom-checkbox input:checked~.checkmark {
+    background-color: var(--primary);
+    border-color: var(--primary);
+}
+
+.custom-checkbox input:checked~.checkmark::after {
+    content: "✓";
+    color: white;
+    font-size: 14px;
+    font-weight: 900;
+}
+
+.history-card.selected {
+    border: 2px solid var(--primary);
+    background-color: #f8fafc;
+}
+
 /* Unified Edit Form (v5) */
 .history-card.editing {
     border: 2px solid var(--primary);
@@ -1015,6 +1068,7 @@ h1 {
     background: #f1f5f9;
     color: var(--text-muted);
 }
+
 /* Custom Modal */
 #modal-container {
     position: fixed;

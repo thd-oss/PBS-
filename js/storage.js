@@ -7,13 +7,21 @@ const Storage = {
         ABC_TAGS: 'pbs_v2_abc_tags'
     },
 
+    cache: {},
+
     save(key, data) {
+        this.cache[key] = data;
         localStorage.setItem(key, JSON.stringify(data));
     },
 
     get(key) {
+        if (this.cache[key] !== undefined) {
+            return this.cache[key];
+        }
         const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : null;
+        const parsed = data ? JSON.parse(data) : null;
+        this.cache[key] = parsed;
+        return parsed;
     },
 
     init() {
@@ -124,6 +132,7 @@ const Storage = {
 
     clearAll() {
         localStorage.clear();
+        this.cache = {};
         this.init();
     },
 

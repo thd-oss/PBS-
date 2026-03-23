@@ -1,6 +1,7 @@
 const App = {
     currentView: 'record-panel',
     currentSubTab: 'abc',
+    selectedLogs: [],
 
     // ABC 기록용 임시 상태
     abcSession: {
@@ -151,6 +152,18 @@ const App = {
         this.targetBehavior.innerText = behavior ? behavior.name : '행동 없음';
     },
 
+    getTargetLogs() {
+        return Storage.getLogs().filter(l =>
+            l.studentId === this.session.currentStudentId &&
+            l.behaviorId === this.session.currentBehaviorId
+        );
+    },
+
+    getTodayLogsForCurrentTarget() {
+        const todayStr = new Date().toDateString();
+        return this.getTargetLogs().filter(l => new Date(l.timestamp).toDateString() === todayStr);
+    },
+
     renderCurrentView() {
         this.renderSharedContext();
         if (this.currentView === 'record-panel') {
@@ -193,6 +206,14 @@ const App = {
 
     renderSharedContext() {
         const rc = this.recordContext;
+        const dateInput = document.getElementById('global-date');
+        if (dateInput) {
+            dateInput.value = rc.date;
+            document.getElementById('global-time').value = rc.time;
+            document.getElementById('global-period').value = rc.period;
+            document.getElementById('global-subject').value = rc.subject;
+            return;
+        }
         this.headerContext.innerHTML = `
             <div class="compact-context">
                 <div class="compact-row">
@@ -202,9 +223,13 @@ const App = {
                 <div class="compact-row">
                     <select id="global-period" class="period-select-sm" onchange="App.recordContext.period=this.value">
                         <option value=""${rc.period === '' ? ' selected' : ''}>교시</option>
-                        ${[1, 2, 3, 4, 5, 6].map(p => `<option value="${p}"${rc.period == p ? ' selected' : ''}>${p}교시</option>`).join('')}
+                        <option value="아침활동"${rc.period === '아침활동' ? ' selected' : ''}>아침활동</option>
+                        <option value="조회"${rc.period === '조회' ? ' selected' : ''}>조회</option>
+                        ${[1, 2, 3, 4].map(p => `<option value="${p}"${rc.period == p ? ' selected' : ''}>${p}교시</option>`).join('')}
+                        <option value="점심"${rc.period === '점심' ? ' selected' : ''}>점심시간</option>
+                        ${[5, 6].map(p => `<option value="${p}"${rc.period == p ? ' selected' : ''}>${p}교시</option>`).join('')}
                         <option value="쉬는시간"${rc.period === '쉬는시간' ? ' selected' : ''}>쉬는시간</option>
-                        <option value="점심"${rc.period === '점심' ? ' selected' : ''}>점심</option>
+                        <option value="종례"${rc.period === '종례' ? ' selected' : ''}>종례</option>
                     </select>
                     <select id="global-subject" class="subject-select-sm" onchange="App.recordContext.subject=this.value">
                         <option value="">과목</option>
@@ -302,11 +327,7 @@ const App = {
 
     getQuickHtml() {
         const running = this.quickTimer.running;
-        const logs = Storage.getLogs().filter(l =>
-            l.studentId === this.session.currentStudentId &&
-            l.behaviorId === this.session.currentBehaviorId &&
-            new Date(l.timestamp).toDateString() === new Date().toDateString()
-        );
+        const logs = this.getTodayLogsForCurrentTarget();
         const count = logs.length;
         const totalDur = logs.reduce((sum, l) => sum + (l.details.durationSeconds || 0), 0);
 
@@ -380,11 +401,7 @@ const App = {
             btn.innerText = '측정 중...';
         }
         const display = document.getElementById('quick-timer-display');
-        const logs = Storage.getLogs().filter(l =>
-            l.studentId === this.session.currentStudentId &&
-            l.behaviorId === this.session.currentBehaviorId &&
-            new Date(l.timestamp).toDateString() === new Date().toDateString()
-        );
+        const logs = this.getTodayLogsForCurrentTarget();
         const prevTotal = logs.reduce((sum, l) => sum + (l.details.durationSeconds || 0), 0);
         this.quickTimer.timerId = setInterval(() => {
             const elapsed = Math.floor((Date.now() - this.quickTimer.startTime) / 1000);
@@ -414,11 +431,7 @@ const App = {
     postRenderRecord() {
         if (this.currentSubTab === 'quick' && this.quickTimer.running) {
             const display = document.getElementById('quick-timer-display');
-            const logs = Storage.getLogs().filter(l =>
-                l.studentId === this.session.currentStudentId &&
-                l.behaviorId === this.session.currentBehaviorId &&
-                new Date(l.timestamp).toDateString() === new Date().toDateString()
-            );
+            const logs = this.getTodayLogsForCurrentTarget();
             const prevTotal = logs.reduce((sum, l) => sum + (l.details.durationSeconds || 0), 0);
             clearInterval(this.quickTimer.timerId);
             this.quickTimer.timerId = setInterval(() => {
@@ -461,12 +474,7 @@ const App = {
     },
 
     undoLastLog() {
-        const todayStr = new Date().toDateString();
-        const logs = Storage.getLogs().filter(l =>
-            l.studentId === this.session.currentStudentId &&
-            l.behaviorId === this.session.currentBehaviorId &&
-            new Date(l.timestamp).toDateString() === todayStr
-        );
+        const logs = this.getTodayLogsForCurrentTarget();
         if (logs.length === 0) return this.showToast('취소할 기록이 없습니다.');
         Storage.removeLog(logs[logs.length - 1].id);
         this.renderRecordPanel();
@@ -648,10 +656,7 @@ const App = {
     },
 
     generateAIPrompt() {
-        const logs = Storage.getLogs().filter(l =>
-            l.studentId === this.session.currentStudentId &&
-            l.behaviorId === this.session.currentBehaviorId
-        );
+        const logs = this.getTargetLogs();
         if (logs.length === 0) return alert('데이터가 없습니다.');
         const studentName = this.targetStudent.innerText;
         const behaviorName = this.targetBehavior.innerText;
@@ -683,10 +688,7 @@ const App = {
     initCharts() {
         const ctx = document.getElementById('mainChart');
         if (!ctx) return;
-        const logs = Storage.getLogs().filter(l =>
-            l.studentId === this.session.currentStudentId &&
-            l.behaviorId === this.session.currentBehaviorId
-        );
+        const logs = this.getTargetLogs();
         const days = ['일', '월', '화', '수', '목', '금', '토'];
         const last7 = [...Array(7)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); return d; });
         const freqData = last7.map(date => logs.filter(l => l.recordMethod === 'event' && new Date(l.timestamp).toDateString() === date.toDateString()).length);
@@ -711,10 +713,7 @@ const App = {
         const heatmap = document.getElementById('heatmap-grid');
         if (!heatmap) return;
         heatmap.innerHTML = '';
-        const logs = Storage.getLogs().filter(l =>
-            l.studentId === this.session.currentStudentId &&
-            l.behaviorId === this.session.currentBehaviorId
-        );
+        const logs = this.getTargetLogs();
         const grid = {};
         let maxVal = 1;
         logs.forEach(l => {
@@ -774,15 +773,35 @@ const App = {
         const logs = Storage.getLogs()
             .filter(l => l.studentId === this.historySelectedStudentId)
             .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        let headerActionsHtml = '';
+        if (logs.length > 0) {
+            const allSelected = this.selectedLogs.length === logs.length && logs.length > 0;
+            headerActionsHtml = `
+                <div class="history-bulk-actions">
+                    <label class="custom-checkbox">
+                        <input type="checkbox" onchange="App.toggleAllLogs(this.checked)" ${allSelected ? 'checked' : ''}>
+                        <span class="checkmark"></span> 전체 선택
+                    </label>
+                    ${this.selectedLogs.length > 0 ?
+                    `<button class="btn-history-action" style="color:white; background:var(--danger);" onclick="App.bulkDeleteLogs()">
+                            선택 삭제 (${this.selectedLogs.length})
+                        </button>` : ''
+                }
+                </div>
+            `;
+        }
+
         if (logs.length === 0) {
             historyList.innerHTML = '<p style="text-align:center; padding:100px 40px; color:var(--text-muted);">기록이 없습니다.</p>';
             return;
         }
-        historyList.innerHTML = logs.map(l => this.editingLogId === l.id ? this.getHistoryEditHtml(l) : this.getHistoryCardHtml(l)).join('');
+        historyList.innerHTML = headerActionsHtml + logs.map(l => this.editingLogId === l.id ? this.getHistoryEditHtml(l) : this.getHistoryCardHtml(l)).join('');
     },
 
     setHistoryStudent(sid) {
         this.historySelectedStudentId = sid;
+        this.selectedLogs = [];
         this.renderHistoryPanel();
     },
 
@@ -792,12 +811,20 @@ const App = {
         const timeStr = new Date(log.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
         const badgeClass = log.recordMethod === 'abc' ? 'm-abc' : 'm-quick';
         const badgeText = log.recordMethod === 'abc' ? 'ABC SNAPSHOT' : 'QUICK EVENT';
+        const isSelected = this.selectedLogs.includes(log.id);
+
         return `
-            <div class="history-card">
+            <div class="history-card ${isSelected ? 'selected' : ''}">
                 <div class="history-card-header">
-                    <div class="history-time-box">
-                        <span class="history-time">${timeStr}</span>
-                        <span class="history-meta">${dateStr} · ${d.period ? d.period + '교시' : '-'} · ${d.subject || '-'}</span>
+                    <div style="display:flex; align-items:flex-start; gap:12px;">
+                        <label class="custom-checkbox" style="margin-top:4px;">
+                            <input type="checkbox" onchange="App.toggleLogSelection('${log.id}', this.checked)" ${isSelected ? 'checked' : ''}>
+                            <span class="checkmark"></span>
+                        </label>
+                        <div class="history-time-box">
+                            <span class="history-time">${timeStr}</span>
+                            <span class="history-meta">${dateStr} · ${d.period ? d.period + '교시' : '-'} · ${d.subject || '-'}</span>
+                        </div>
                     </div>
                     <div class="history-badges"><span class="badge-method ${badgeClass}">${badgeText}</span></div>
                 </div>
@@ -890,6 +917,35 @@ const App = {
             Storage.removeLog(logId);
             this.renderHistoryPanel();
             this.showToast('삭제되었습니다.');
+        });
+    },
+
+    toggleLogSelection(logId, isChecked) {
+        if (isChecked) {
+            if (!this.selectedLogs.includes(logId)) this.selectedLogs.push(logId);
+        } else {
+            this.selectedLogs = this.selectedLogs.filter(id => id !== logId);
+        }
+        this.renderHistoryPanel();
+    },
+
+    toggleAllLogs(isChecked) {
+        if (isChecked) {
+            const logs = Storage.getLogs().filter(l => l.studentId === this.historySelectedStudentId);
+            this.selectedLogs = logs.map(l => l.id);
+        } else {
+            this.selectedLogs = [];
+        }
+        this.renderHistoryPanel();
+    },
+
+    bulkDeleteLogs() {
+        if (this.selectedLogs.length === 0) return;
+        this.showConfirm('선택 삭제', `선택한 ${this.selectedLogs.length}개의 기록을 계속 삭제하시겠습니까?`, () => {
+            this.selectedLogs.forEach(id => Storage.removeLog(id));
+            this.selectedLogs = [];
+            this.renderHistoryPanel();
+            this.showToast('선택한 기록이 모두 삭제되었습니다.');
         });
     },
 
