@@ -3,6 +3,16 @@ const App = {
     currentSubTab: 'abc',
     selectedLogs: [],
 
+    escapeHTML(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    },
+
     // ABC 기록용 임시 상태
     abcSession: {
         settingEvent: [],
@@ -234,7 +244,7 @@ const App = {
                     <select id="global-subject" class="subject-select-sm" onchange="App.recordContext.subject=this.value">
                         <option value="">과목</option>
                         ${['국어', '수학', '영어', '사회', '과학', '음악', '미술', '체육', '도덕', '실과', '창체', '기타']
-                .map(s => `<option${rc.subject === s ? ' selected' : ''}>${s}</option>`).join('')}
+                .map(s => `<option${rc.subject === s ? ' selected' : ''}>${this.escapeHTML(s)}</option>`).join('')}
                     </select>
                 </div>
             </div>
@@ -246,9 +256,9 @@ const App = {
             <div class="chip-group">
                 ${items.map(item => `
                     <div class="chip ${selectedValues.includes(item) ? 'active' : ''}" 
-                         data-action="select-chip" data-group="${group}" data-value="${item}">
-                        <span class="chip-text">${item}</span>
-                        <div class="chip-delete" data-action="remove-abc-tag" data-group="${group}" data-value="${item}">
+                         data-action="select-chip" data-group="${group}" data-value="${this.escapeHTML(item)}">
+                        <span class="chip-text">${this.escapeHTML(item)}</span>
+                        <div class="chip-delete" data-action="remove-abc-tag" data-group="${group}" data-value="${this.escapeHTML(item)}">
                             &times;
                         </div>
                     </div>
@@ -297,7 +307,7 @@ const App = {
                 </div>
                 ${this.getChipHtml(category, tags[category] || [], s[category])}
                 <input type="text" class="abc-custom-input" placeholder="직접 입력..." 
-                       value="${s[category + 'Custom'] || ''}" oninput="App.abcSession['${category}Custom']=this.value">
+                       value="${this.escapeHTML(s[category + 'Custom'] || '')}" oninput="App.abcSession['${category}Custom']=this.value">
             </div>
         `;
 
@@ -313,7 +323,7 @@ const App = {
                         <label>5. 메모 (선택)</label>
                         <div class="note-container">
                             <textarea id="abc-note" placeholder="추가 설명..." rows="2" 
-                                      oninput="App.abcSession.note=this.value">${s.note || ''}</textarea>
+                                      oninput="App.abcSession.note=this.value">${this.escapeHTML(s.note || '')}</textarea>
                         </div>
                     </div>
                 </div>
@@ -364,13 +374,11 @@ const App = {
     },
 
     handleQuickStart(e) {
-        if (e && e.type === 'touchstart') e.preventDefault();
         if (this.quickTimer.running) return;
         this.quickTimer.longPressTimer = setTimeout(() => { this.startQuickDuration(); }, 500);
     },
 
     handleQuickEnd(e) {
-        if (e && e.type === 'touchend') e.preventDefault();
         clearTimeout(this.quickTimer.longPressTimer);
         if (this.quickTimer.running) { this.stopQuickDuration(); }
         else { this.logQuickEvent(); }
@@ -444,6 +452,13 @@ const App = {
     saveABC() {
         const ts = this.readDateTimeFromInputs('global-date', 'global-time');
         const s = this.abcSession;
+        const note = document.getElementById('abc-note').value;
+        const hasData = s.settingEvent.length > 0 || s.a.length > 0 || s.bDetail.length > 0 || s.c.length > 0 ||
+            s.settingEventCustom.trim() || s.aCustom.trim() || s.bDetailCustom.trim() || s.cCustom.trim() ||
+            note.trim();
+
+        if (!hasData) return this.showToast('기록할 내용을 최소 하나 이상 입력하거나 선택해 주세요.');
+
         const joinData = (tags, custom) => {
             const all = [...tags];
             if (custom.trim()) all.push(custom.trim());
@@ -460,7 +475,7 @@ const App = {
                 antecedent: joinData(s.a, s.aCustom),
                 behaviorDetail: joinData(s.bDetail, s.bDetailCustom),
                 consequence: joinData(s.c, s.cCustom),
-                note: document.getElementById('abc-note').value,
+                note: note,
                 period: document.getElementById('global-period').value,
                 subject: document.getElementById('global-subject').value
             }
@@ -504,7 +519,7 @@ const App = {
                 const isBActive = b.id === currentBid && isActive;
                 return `
                     <div class="behavior-item ${isBActive ? 'active' : ''}" data-action="select-behavior" data-student-id="${s.id}" data-id="${b.id}">
-                        <span>${b.name}</span>
+                        <span>${this.escapeHTML(b.name)}</span>
                         <button class="btn-icon-sm" data-action="remove-behavior" data-id="${b.id}">✕</button>
                     </div>`;
             }).join('');
@@ -513,8 +528,8 @@ const App = {
                 <div class="card student-card ${isActive ? 'student-active' : ''}">
                     <div class="student-header">
                         <div>
-                            <strong>${s.name}</strong>
-                            <span class="student-info">${s.info || ''}</span>
+                            <strong>${this.escapeHTML(s.name)}</strong>
+                            <span class="student-info">${this.escapeHTML(s.info || '')}</span>
                         </div>
                         <div>
                             <button class="btn-icon-sm" data-action="edit-student" data-id="${s.id}">✏️</button>
@@ -829,7 +844,7 @@ const App = {
                     <div class="history-badges"><span class="badge-method ${badgeClass}">${badgeText}</span></div>
                 </div>
                 <div class="history-behavior-row">
-                    <span class="history-behavior">${log.behaviorType}</span>
+                    <span class="history-behavior">${this.escapeHTML(log.behaviorType)}</span>
                     ${d.durationSeconds ? `<span class="history-duration"><i class="lucide-clock" style="font-size:0.8rem;"></i> ${this.formatTime(d.durationSeconds)}</span>` : ''}
                 </div>
                 ${log.recordMethod === 'abc' ? `
@@ -843,7 +858,7 @@ const App = {
                         </div>
                     </div>
                 ` : ''}
-                ${d.note ? `<div class="history-note">${d.note}</div>` : ''}
+                ${d.note ? `<div class="history-note">${this.escapeHTML(d.note)}</div>` : ''}
                 <div class="history-actions">
                     <button class="btn-history-action" data-action="history-edit" data-id="${log.id}">수정</button>
                     <button class="btn-history-action" data-action="history-delete" data-id="${log.id}">삭제</button>
@@ -861,8 +876,8 @@ const App = {
                     <input type="time" id="edit-time-${l.id}" value="${dt.split('T')[1].slice(0, 5)}">
                 </div>
                 <div class="edit-fields">
-                    <input type="text" id="edit-b-${l.id}" value="${l.behaviorType}" placeholder="행동명">
-                    <textarea id="edit-note-${l.id}" placeholder="메모">${d.note || ''}</textarea>
+                    <input type="text" id="edit-b-${l.id}" value="${this.escapeHTML(l.behaviorType)}" placeholder="행동명">
+                    <textarea id="edit-note-${l.id}" placeholder="메모">${this.escapeHTML(d.note || '')}</textarea>
                 </div>
                 <div class="history-actions">
                     <button class="btn-history-action btn-primary" data-action="history-save-edit" data-id="${l.id}">저장</button>
@@ -873,7 +888,7 @@ const App = {
 
     formatABCItem(text) {
         if (!text) return '-';
-        return text.split(', ').map(t => `<span class="abc-tag-sm">${t}</span>`).join('');
+        return text.split(', ').map(t => `<span class="abc-tag-sm">${this.escapeHTML(t)}</span>`).join('');
     },
 
     toggleEditLog(logId) {
@@ -961,8 +976,8 @@ const App = {
         this.modalTitle.innerText = title;
         this.modalBody.innerHTML = fields.map(f => `
             <div style="margin-bottom:12px;">
-                <label>${f.label}</label>
-                <input type="text" id="modal-input-${f.id}" value="${f.value || ''}" placeholder="${f.placeholder || ''}">
+                <label>${this.escapeHTML(f.label)}</label>
+                <input type="text" id="modal-input-${f.id}" value="${this.escapeHTML(f.value || '')}" placeholder="${this.escapeHTML(f.placeholder || '')}">
             </div>
         `).join('');
         this.modal.classList.remove('hidden');
@@ -980,7 +995,7 @@ const App = {
 
     showConfirm(title, message, onOk) {
         this.modalTitle.innerText = title;
-        this.modalBody.innerHTML = `<p style="text-align:center; padding:10px 0;">${message}</p>`;
+        this.modalBody.innerHTML = `<p style="text-align:center; padding:10px 0;">${this.escapeHTML(message)}</p>`;
         this.modal.classList.remove('hidden');
         this.modalSave.onclick = () => { onOk(); this.closeModal(); };
     },
