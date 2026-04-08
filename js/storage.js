@@ -26,15 +26,12 @@ const Storage = {
 
     init() {
         if (!this.get(this.KEYS.STUDENTS)) {
-            const defaultStudents = [{ id: 's1', name: '김철수', info: '1학년 2반' }];
-            const defaultBehaviors = [
-                { id: 'b1', studentId: 's1', name: '자리 이탈' },
-                { id: 'b2', studentId: 's1', name: '불쑥 말하기' }
-            ];
+            const defaultStudents = [];
+            const defaultBehaviors = [];
             this.save(this.KEYS.STUDENTS, defaultStudents);
             this.save(this.KEYS.BEHAVIORS, defaultBehaviors);
             this.save(this.KEYS.LOGS, []);
-            this.save(this.KEYS.SETTINGS, { currentStudentId: 's1', currentBehaviorId: 'b1' });
+            this.save(this.KEYS.SETTINGS, { currentStudentId: '', currentBehaviorId: '' });
         }
 
         // ABC 태그 초기화 (v7)
